@@ -46,28 +46,25 @@ class AccountBox extends StatelessWidget {
     return InkWell(
       onTap: onSelected,
       child: PhysicalModel(
-        borderRadius: BorderRadius.circular(22),
-        elevation: 0,
+        borderRadius: BorderRadius.circular(15),
+        elevation: 4,
         color: Colors.transparent,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 360;
-            final reservedRight = selected
-                ? (compact ? 152.0 : 172.0)
-                : (compact ? 44.0 : 52.0);
-            final maxBalanceWidth = selected
-                ? (compact ? 66.0 : 90.0)
-                : (compact ? 86.0 : 116.0);
             return Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: const Alignment(0, 0.2),
+                  end: const Alignment(0.1, 1.3),
                   colors: gradientColors,
                 ),
-                border: Border.all(color: const Color(0xFFB9359A), width: 2),
-                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: const Color(0xFFB9359A),
+                  width: selected ? 3 : 2,
+                ),
+                borderRadius: BorderRadius.circular(15),
               ),
               child: Stack(
                 children: [
@@ -77,182 +74,177 @@ class AccountBox extends StatelessWidget {
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.only(
-                          left: 14,
-                          bottom: 8,
-                          right: 14,
-                          top: 4,
+                          left: 12,
+                          bottom: 5,
+                          right: 10,
+                          top: 2,
                         ),
                         decoration: const BoxDecoration(
                           color: Color(0xFFB9359A),
                           borderRadius: BorderRadius.only(
-                            bottomLeft: Radius.circular(16),
-                            topRight: Radius.circular(20),
+                            bottomLeft: Radius.circular(15),
+                            topRight: Radius.circular(12),
                           ),
                         ),
                         child: Text(
                           selectedText,
                           style: TextStyle(
                             color: Styles.whiteColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: Styles.fsCaption,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
                           ),
                         ),
                       ),
                     ),
                   Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      selected ? 34 : 18,
-                      reservedRight,
-                      18,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: selected ? 24 : 18,
                     ),
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         _buildAddressAvatar(address),
-                        const Gap(12),
+                        const Gap(10),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: compact
-                                            ? Styles.fsBodyStrong
-                                            : Styles.fsCardTitle,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  const Gap(8),
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: maxBalanceWidth,
-                                    ),
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerRight,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Image.asset(
-                                              "assets/images/reef.png",
-                                              width: 13,
-                                              height: 13,
-                                            ),
-                                            const Gap(4),
-                                            Text(
-                                              selected
-                                                  ? balance
-                                                  : '$balance REEF',
-                                              overflow: TextOverflow.fade,
-                                              softWrap: false,
-                                              style: GoogleFonts.poppins(
-                                                color: Colors.white,
-                                                fontSize: compact
-                                                    ? Styles.fsCaption
-                                                    : Styles.fsBodyStrong,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 2, right: 2),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontSize: compact ? 16 : 18,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const Gap(8),
-                              Container(
-                                color: const Color(0x99644E8A),
-                                height: 1,
-                              ),
-                              const Gap(10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '$addressPrefix ${_shortAddress(address)}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: Styles.fsBody,
-                                        color: Color(0xFFA8A1C3),
-                                        fontWeight: FontWeight.w700,
+                                    const Gap(8),
+                                    Flexible(
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerRight,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Image.asset(
+                                                "assets/images/reef.png",
+                                                width: compact ? 14 : 16,
+                                                height: compact ? 14 : 16,
+                                              ),
+                                              const Gap(4),
+                                              Text(
+                                                '$balance REEF',
+                                                overflow: TextOverflow.fade,
+                                                softWrap: false,
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.white,
+                                                  fontSize: compact ? 12 : 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
+                                  ],
+                                ),
+                                const Gap(6),
+                                Container(
+                                  color: Colors.purpleAccent.shade100.withAlpha(
+                                    44,
                                   ),
-                                ],
+                                  height: 1,
+                                ),
+                                const Gap(6),
+                                Text.rich(
+                                  TextSpan(
+                                    text: addressPrefix,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFFA8A1C3),
+                                    ),
+                                    children: <TextSpan>[
+                                      TextSpan(
+                                        text: ' ${_shortAddress(address)}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        PopupMenuButton<AccountMenuAction>(
+                          color: Colors.white,
+                          icon: Icon(
+                            Icons.more_vert,
+                            color: Colors.grey.shade100,
+                            size: 24,
+                          ),
+                          enableFeedback: true,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          onSelected: (value) => onMenuAction?.call(value),
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: AccountMenuAction.selectAccount,
+                              child: Text(
+                                selectAccountText,
+                                style: TextStyle(
+                                  color: Color(0xFF1F1F28),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    right: 4,
-                    top: selected ? 66 : 14,
-                    child: PopupMenuButton<AccountMenuAction>(
-                      color: Colors.white,
-                      icon: const Icon(
-                        Icons.more_vert_rounded,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      onSelected: (value) => onMenuAction?.call(value),
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: AccountMenuAction.selectAccount,
-                          child: Text(
-                            selectAccountText,
-                            style: TextStyle(
-                              color: Color(0xFF1F1F28),
-                              fontWeight: FontWeight.w700,
                             ),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: AccountMenuAction.copyEvmAddress,
-                          child: Text(
-                            copyEvmAddressText,
-                            style: TextStyle(
-                              color: Color(0xFF1F1F28),
-                              fontWeight: FontWeight.w700,
+                            PopupMenuItem(
+                              value: AccountMenuAction.copyEvmAddress,
+                              child: Text(
+                                copyEvmAddressText,
+                                style: TextStyle(
+                                  color: Color(0xFF1F1F28),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: AccountMenuAction.delete,
-                          child: Text(
-                            deleteText,
-                            style: TextStyle(
-                              color: Color(0xFF1F1F28),
-                              fontWeight: FontWeight.w700,
+                            PopupMenuItem(
+                              value: AccountMenuAction.delete,
+                              child: Text(
+                                deleteText,
+                                style: TextStyle(
+                                  color: Color(0xFF1F1F28),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: AccountMenuAction.exportAccount,
-                          child: Text(
-                            exportAccountText,
-                            style: TextStyle(
-                              color: Color(0xFF1F1F28),
-                              fontWeight: FontWeight.w700,
+                            PopupMenuItem(
+                              value: AccountMenuAction.exportAccount,
+                              child: Text(
+                                exportAccountText,
+                                style: TextStyle(
+                                  color: Color(0xFF1F1F28),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
