@@ -4,22 +4,34 @@ import 'service_providers.dart';
 
 class SettingsState {
   final String rpcUrl;
-  final bool useBiometrics;
+  final bool? useBiometrics;
+  final bool? goHomeOnSwitch;
+  final bool? developerExpanded;
 
   SettingsState({
     required this.rpcUrl,
     required this.useBiometrics,
+    required this.goHomeOnSwitch,
+    this.developerExpanded,
   });
 
   SettingsState copyWith({
     String? rpcUrl,
     bool? useBiometrics,
+    bool? goHomeOnSwitch,
+    bool? developerExpanded,
   }) {
     return SettingsState(
       rpcUrl: rpcUrl ?? this.rpcUrl,
       useBiometrics: useBiometrics ?? this.useBiometrics,
+      goHomeOnSwitch: goHomeOnSwitch ?? this.goHomeOnSwitch,
+      developerExpanded: developerExpanded ?? this.developerExpanded,
     );
   }
+
+  bool get isDeveloperExpanded => developerExpanded ?? false;
+  bool get biometricsEnabled => useBiometrics ?? false;
+  bool get goHomeEnabled => goHomeOnSwitch ?? true;
 }
 
 class SettingsNotifier extends Notifier<SettingsState> {
@@ -27,16 +39,27 @@ class SettingsNotifier extends Notifier<SettingsState> {
   SettingsState build() {
     // Initial state
     Future.microtask(() => _loadSettings());
-    return SettingsState(rpcUrl: 'http://localhost:8545', useBiometrics: false);
+    return SettingsState(
+      rpcUrl: 'http://localhost:8545',
+      useBiometrics: false,
+      goHomeOnSwitch: true,
+      developerExpanded: false,
+    );
   }
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final rpc = prefs.getString('rpc_url') ?? 'http://localhost:8545';
     final biometrics = prefs.getBool('use_biometrics') ?? false;
-    
-    state = state.copyWith(rpcUrl: rpc, useBiometrics: biometrics);
-    
+    final goHome = prefs.getBool('go_home_on_switch') ?? true;
+
+    state = state.copyWith(
+      rpcUrl: rpc,
+      useBiometrics: biometrics,
+      goHomeOnSwitch: goHome,
+      developerExpanded: state.developerExpanded,
+    );
+
     // Update Web3 Service
     ref.read(web3ServiceProvider).updateRpc(rpc);
   }
@@ -45,7 +68,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('rpc_url', rpcUrl);
     state = state.copyWith(rpcUrl: rpcUrl);
-    
+
     // Update Web3 Service
     ref.read(web3ServiceProvider).updateRpc(rpcUrl);
   }
@@ -54,6 +77,16 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use_biometrics', enabled);
     state = state.copyWith(useBiometrics: enabled);
+  }
+
+  Future<void> setGoHomeOnSwitch(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('go_home_on_switch', enabled);
+    state = state.copyWith(goHomeOnSwitch: enabled);
+  }
+
+  void setDeveloperExpanded(bool expanded) {
+    state = state.copyWith(developerExpanded: expanded);
   }
 }
 

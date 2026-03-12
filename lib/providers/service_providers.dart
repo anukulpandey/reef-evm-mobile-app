@@ -5,6 +5,7 @@ import '../services/wallet_service.dart';
 import '../services/web3_service.dart';
 import '../services/pool_service.dart';
 import '../services/fcm_service.dart';
+import '../services/explorer_service.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>((ref) {
   return SecureStorageService();
@@ -25,6 +26,10 @@ final web3ServiceProvider = Provider<Web3Service>((ref) {
 
 final poolServiceProvider = Provider<PoolService>((ref) {
   return PoolService();
+});
+
+final explorerServiceProvider = Provider<ExplorerService>((ref) {
+  return ExplorerService();
 });
 
 final fcmServiceProvider = Provider<FCMService>((ref) {

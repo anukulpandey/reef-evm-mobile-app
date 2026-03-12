@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
-import 'screens/auth_screen.dart';
+import 'l10n/app_localizations.dart';
+import 'providers/locale_provider.dart';
+import 'screens/splash_screen.dart';
 import 'services/fcm_service.dart';
 
 void main() async {
@@ -21,16 +24,32 @@ void main() async {
   runApp(const ProviderScope(child: ReefWalletApp()));
 }
 
-class ReefWalletApp extends StatelessWidget {
+class ReefWalletApp extends ConsumerWidget {
   const ReefWalletApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final localeState = ref.watch(localeProvider);
     return MaterialApp(
       title: 'Reef Wallet',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const AuthScreen(),
+      locale: localeState.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        AppLocalizations.delegate,
+      ],
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(textScaler: const TextScaler.linear(1.0)),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+      home: const SplashScreen(),
     );
   }
 }

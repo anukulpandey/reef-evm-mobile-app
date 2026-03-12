@@ -4,6 +4,7 @@ import 'wallet_screen.dart';
 import 'pools_screen.dart';
 import 'settings_screen.dart';
 import '../core/theme/styles.dart';
+import '../l10n/app_localizations.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -24,11 +25,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -38,11 +37,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         selectedItemColor: Styles.purpleColor,
         unselectedItemColor: Colors.black38,
         type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Wallet'),
-          BottomNavigationBarItem(icon: Icon(Icons.cached), label: 'Pools'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
+        items: [
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.home_outlined),
+            label: l10n.home,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            label: l10n.wallet,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.cached),
+            label: l10n.pools,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.settings_outlined),
+            label: l10n.settings,
+          ),
         ],
       ),
     );

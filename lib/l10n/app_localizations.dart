@@ -1,0 +1,416 @@
+import 'package:flutter/widgets.dart';
+
+class AppLocalizations {
+  AppLocalizations(this.locale);
+
+  final Locale locale;
+
+  static AppLocalizations of(BuildContext context) {
+    final localizations = Localizations.of<AppLocalizations>(
+      context,
+      AppLocalizations,
+    );
+    return localizations ?? AppLocalizations(const Locale('en'));
+  }
+
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
+
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('en'),
+    Locale('hi'),
+    Locale('it'),
+  ];
+
+  String _get(String key) {
+    final lang = locale.languageCode.toLowerCase();
+    final forLang = _localizedValues[lang] ?? _localizedValues['en']!;
+    return forLang[key] ?? _localizedValues['en']![key] ?? key;
+  }
+
+  String get home => _get('home');
+  String get wallet => _get('wallet');
+  String get pools => _get('pools');
+  String get settings => _get('settings');
+  String get tokens => _get('tokens');
+  String get nfts => _get('nfts');
+  String get myAccount => _get('myAccount');
+  String get buyReef => _get('buyReef');
+  String get add => _get('add');
+  String get addAccount => _get('addAccount');
+  String get noAccountAvailable => _get('noAccountAvailable');
+  String get noTokensFound => _get('noTokensFound');
+  String get noNftsFound => _get('noNftsFound');
+  String get balanceTitle => _get('balanceTitle');
+  String get priceLabel => _get('priceLabel');
+  String get send => _get('send');
+  String get transferFailed => _get('transferFailed');
+  String get walletConnect => _get('walletConnect');
+  String get goHomeOnSwitch => _get('goHomeOnSwitch');
+  String get biometricAuth => _get('biometricAuth');
+  String get changePassword => _get('changePassword');
+  String get selectLanguage => _get('selectLanguage');
+  String get developerSettings => _get('developerSettings');
+  String get editRpc => _get('editRpc');
+  String get rpcEndpoint => _get('rpcEndpoint');
+  String get cancel => _get('cancel');
+  String get save => _get('save');
+  String get languageEnglish => _get('languageEnglish');
+  String get languageHindi => _get('languageHindi');
+  String get languageItalian => _get('languageItalian');
+  String get changeLanguage => _get('changeLanguage');
+  String get sendToken => _get('sendToken');
+  String get recipientAddress => _get('recipientAddress');
+  String get amount => _get('amount');
+  String get transactionSubmitted => _get('transactionSubmitted');
+  String get invalidAddressOrAmount => _get('invalidAddressOrAmount');
+  String get noWalletConnectYet => _get('noWalletConnectYet');
+  String get scanQr => _get('scanQr');
+  String get stopScan => _get('stopScan');
+  String get scannedUri => _get('scannedUri');
+  String get copied => _get('copied');
+  String get setPassword => _get('setPassword');
+  String get newPassword => _get('newPassword');
+  String get confirmPassword => _get('confirmPassword');
+  String get enterAppPassword => _get('enterAppPassword');
+  String get invalidPassword => _get('invalidPassword');
+  String get passwordMismatch => _get('passwordMismatch');
+  String get passwordSaved => _get('passwordSaved');
+  String get initialisingApp => _get('initialisingApp');
+  String get appLocked => _get('appLocked');
+  String get unlock => _get('unlock');
+  String get selected => _get('selected');
+  String get addressLabel => _get('addressLabel');
+  String get selectAccount => _get('selectAccount');
+  String get copyEvmAddress => _get('copyEvmAddress');
+  String get accountSelected => _get('accountSelected');
+  String get evmAddressCopied => _get('evmAddressCopied');
+  String get deleteAccount => _get('deleteAccount');
+  String get deleteAccountConfirm => _get('deleteAccountConfirm');
+  String get deleteLabel => _get('deleteLabel');
+  String get exportAccount => _get('exportAccount');
+  String get mnemonicCopiedForExport => _get('mnemonicCopiedForExport');
+  String get privateKeyCopiedForExport => _get('privateKeyCopiedForExport');
+  String get tokenPools => _get('tokenPools');
+  String get errorPrefix => _get('errorPrefix');
+  String get tvlLabel => _get('tvlLabel');
+  String get volume24hLabel => _get('volume24hLabel');
+  String get addAccountTitle => _get('addAccountTitle');
+  String get createNew => _get('createNew');
+  String get importRecoveryPhrase => _get('importRecoveryPhrase');
+  String get failedToCreateAccount => _get('failedToCreateAccount');
+  String get generatedRecoveryPhrase => _get('generatedRecoveryPhrase');
+  String get copyToClipboard => _get('copyToClipboard');
+  String get recoveryPhraseWarning => _get('recoveryPhraseWarning');
+  String get savedRecoveryPhrase => _get('savedRecoveryPhrase');
+  String get nextStep => _get('nextStep');
+  String get descriptiveAccountName => _get('descriptiveAccountName');
+  String get enableBiometricAuthentication =>
+      _get('enableBiometricAuthentication');
+  String get passwordForReefApp => _get('passwordForReefApp');
+  String get repeatPasswordForVerification =>
+      _get('repeatPasswordForVerification');
+  String get importFromPhrase => _get('importFromPhrase');
+  String get enterMnemonicPhrase => _get('enterMnemonicPhrase');
+  String get importLabel => _get('importLabel');
+  String get addressCopied => _get('addressCopied');
+  String get recoveryPhraseCopied => _get('recoveryPhraseCopied');
+  String get noName => _get('noName');
+}
+
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
+  const _AppLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => AppLocalizations.supportedLocales.any(
+    (supported) => supported.languageCode == locale.languageCode,
+  );
+
+  @override
+  Future<AppLocalizations> load(Locale locale) async {
+    return AppLocalizations(locale);
+  }
+
+  @override
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
+}
+
+const Map<String, Map<String, String>>
+_localizedValues = <String, Map<String, String>>{
+  'en': <String, String>{
+    'home': 'Home',
+    'wallet': 'Wallet',
+    'pools': 'Pools',
+    'settings': 'Settings',
+    'tokens': 'Tokens',
+    'nfts': 'NFTs',
+    'myAccount': 'My Account',
+    'buyReef': 'Buy Reef',
+    'add': 'Add',
+    'addAccount': 'Add Account',
+    'noAccountAvailable':
+        'No account currently available, create or import an account to view your assets.',
+    'noTokensFound': 'No tokens found',
+    'noNftsFound': 'No NFTs found',
+    'balanceTitle': 'Balance',
+    'priceLabel': 'Price: \$0.00',
+    'send': 'SEND',
+    'transferFailed': 'Transfer failed',
+    'walletConnect': 'WalletConnect',
+    'goHomeOnSwitch': 'Go to Home on Account Switch',
+    'biometricAuth': 'Biometric Authentication',
+    'changePassword': 'Change Password',
+    'selectLanguage': 'Select Language',
+    'developerSettings': 'Developer Settings',
+    'editRpc': 'Edit RPC',
+    'rpcEndpoint': 'RPC Endpoint',
+    'cancel': 'Cancel',
+    'save': 'Save',
+    'languageEnglish': 'English',
+    'languageHindi': 'Hindi',
+    'languageItalian': 'Italian',
+    'changeLanguage': 'Change Language',
+    'sendToken': 'Send Token',
+    'recipientAddress': 'Recipient Address',
+    'amount': 'Amount',
+    'transactionSubmitted': 'Transaction submitted',
+    'invalidAddressOrAmount': 'Enter a valid address and amount',
+    'noWalletConnectYet': 'WalletConnect pairing is not configured yet.',
+    'scanQr': 'Scan QR',
+    'stopScan': 'Stop Scan',
+    'scannedUri': 'Scanned URI',
+    'copied': 'Copied',
+    'setPassword': 'Set App Password',
+    'newPassword': 'New Password',
+    'confirmPassword': 'Confirm Password',
+    'enterAppPassword': 'Enter App Password',
+    'invalidPassword': 'Invalid password',
+    'passwordMismatch': 'Passwords do not match',
+    'passwordSaved': 'Password saved',
+    'initialisingApp': 'Initializing app',
+    'appLocked': 'App is Locked',
+    'unlock': 'Unlock',
+    'selected': 'Selected',
+    'addressLabel': 'Address',
+    'selectAccount': 'Select Account',
+    'copyEvmAddress': 'Copy EVM Address',
+    'accountSelected': 'Account selected',
+    'evmAddressCopied': 'EVM address copied',
+    'deleteAccount': 'Delete account',
+    'deleteAccountConfirm': 'This will clear the currently active account.',
+    'deleteLabel': 'Delete',
+    'exportAccount': 'Export Account',
+    'mnemonicCopiedForExport': 'Mnemonic copied for export',
+    'privateKeyCopiedForExport': 'Private key copied for export',
+    'tokenPools': 'Token Pools',
+    'errorPrefix': 'Error',
+    'tvlLabel': 'TVL',
+    'volume24hLabel': '24h Vol.',
+    'addAccountTitle': 'Add Account',
+    'createNew': 'Create new',
+    'importRecoveryPhrase': 'Import recovery phrase',
+    'failedToCreateAccount': 'Failed to create account',
+    'generatedRecoveryPhrase': 'GENERATED 12-WORD RECOVERY PHRASE (MNEMONIC):',
+    'copyToClipboard': 'Copy to clipboard',
+    'recoveryPhraseWarning':
+        'Please write down your wallet\'s mnemonic seed and keep it in a safe place. The mnemonic can be used to restore your wallet. Keep it carefully to not lose your assets.',
+    'savedRecoveryPhrase':
+        'I have saved my recovery phrase (mnemonic/seed) safely.',
+    'nextStep': 'Next Step',
+    'descriptiveAccountName': 'A DESCRIPTIVE NAME FOR YOUR ACCOUNT',
+    'enableBiometricAuthentication': 'Enable Biometric authentication',
+    'passwordForReefApp': 'A PASSWORD FOR REEF APP',
+    'repeatPasswordForVerification': 'REPEAT PASSWORD FOR VERIFICATION',
+    'importFromPhrase': 'Import from Phrase',
+    'enterMnemonicPhrase': 'Enter mnemonic phrase...',
+    'importLabel': 'Import',
+    'addressCopied': 'Address copied',
+    'recoveryPhraseCopied': 'Recovery phrase copied',
+    'noName': '<No Name>',
+  },
+  'hi': <String, String>{
+    'home': 'होम',
+    'wallet': 'वॉलेट',
+    'pools': 'पूल्स',
+    'settings': 'सेटिंग्स',
+    'tokens': 'टोकन',
+    'nfts': 'NFTs',
+    'myAccount': 'मेरा अकाउंट',
+    'buyReef': 'रीफ खरीदें',
+    'add': 'जोड़ें',
+    'addAccount': 'अकाउंट जोड़ें',
+    'noAccountAvailable':
+        'अभी कोई अकाउंट उपलब्ध नहीं है, अपनी संपत्ति देखने के लिए अकाउंट बनाएं या इंपोर्ट करें।',
+    'noTokensFound': 'कोई टोकन नहीं मिला',
+    'noNftsFound': 'कोई NFT नहीं मिला',
+    'balanceTitle': 'बैलेंस',
+    'priceLabel': 'कीमत: \$0.00',
+    'send': 'भेजें',
+    'transferFailed': 'ट्रांसफर विफल',
+    'walletConnect': 'वॉलेट कनेक्ट',
+    'goHomeOnSwitch': 'अकाउंट बदलने पर होम पर जाएं',
+    'biometricAuth': 'बायोमेट्रिक प्रमाणीकरण',
+    'changePassword': 'पासवर्ड बदलें',
+    'selectLanguage': 'भाषा चुनें',
+    'developerSettings': 'डेवलपर सेटिंग्स',
+    'editRpc': 'RPC बदलें',
+    'rpcEndpoint': 'RPC एंडपॉइंट',
+    'cancel': 'रद्द करें',
+    'save': 'सेव करें',
+    'languageEnglish': 'अंग्रेज़ी',
+    'languageHindi': 'हिंदी',
+    'languageItalian': 'इटैलियन',
+    'changeLanguage': 'भाषा बदलें',
+    'sendToken': 'टोकन भेजें',
+    'recipientAddress': 'प्राप्तकर्ता पता',
+    'amount': 'राशि',
+    'transactionSubmitted': 'ट्रांजैक्शन भेजा गया',
+    'invalidAddressOrAmount': 'सही पता और राशि दर्ज करें',
+    'noWalletConnectYet': 'WalletConnect pairing अभी कॉन्फ़िगर नहीं है।',
+    'scanQr': 'QR स्कैन करें',
+    'stopScan': 'स्कैन रोकें',
+    'scannedUri': 'स्कैन किया गया URI',
+    'copied': 'कॉपी किया गया',
+    'setPassword': 'ऐप पासवर्ड सेट करें',
+    'newPassword': 'नया पासवर्ड',
+    'confirmPassword': 'पासवर्ड की पुष्टि करें',
+    'enterAppPassword': 'ऐप पासवर्ड दर्ज करें',
+    'invalidPassword': 'गलत पासवर्ड',
+    'passwordMismatch': 'पासवर्ड मेल नहीं खाते',
+    'passwordSaved': 'पासवर्ड सेव हो गया',
+    'initialisingApp': 'ऐप शुरू हो रहा है',
+    'appLocked': 'ऐप लॉक है',
+    'unlock': 'अनलॉक',
+    'selected': 'चयनित',
+    'addressLabel': 'पता',
+    'selectAccount': 'अकाउंट चुनें',
+    'copyEvmAddress': 'EVM पता कॉपी करें',
+    'accountSelected': 'अकाउंट चुना गया',
+    'evmAddressCopied': 'EVM पता कॉपी हुआ',
+    'deleteAccount': 'अकाउंट हटाएं',
+    'deleteAccountConfirm': 'यह वर्तमान सक्रिय अकाउंट को हटा देगा।',
+    'deleteLabel': 'हटाएं',
+    'exportAccount': 'अकाउंट एक्सपोर्ट करें',
+    'mnemonicCopiedForExport': 'एक्सपोर्ट के लिए म्नेमोनिक कॉपी हुआ',
+    'privateKeyCopiedForExport': 'एक्सपोर्ट के लिए प्राइवेट की कॉपी हुई',
+    'tokenPools': 'टोकन पूल',
+    'errorPrefix': 'त्रुटि',
+    'tvlLabel': 'TVL',
+    'volume24hLabel': '24h वॉल्यूम',
+    'addAccountTitle': 'अकाउंट जोड़ें',
+    'createNew': 'नया बनाएं',
+    'importRecoveryPhrase': 'रिकवरी फ़्रेज़ इंपोर्ट करें',
+    'failedToCreateAccount': 'अकाउंट बनाना विफल रहा',
+    'generatedRecoveryPhrase': 'उत्पन्न 12-शब्द रिकवरी फ़्रेज़ (MNEMONIC):',
+    'copyToClipboard': 'क्लिपबोर्ड में कॉपी करें',
+    'recoveryPhraseWarning':
+        'कृपया अपने वॉलेट का म्नेमोनिक सीड लिखकर सुरक्षित रखें। इसे वॉलेट बहाल करने के लिए उपयोग किया जा सकता है।',
+    'savedRecoveryPhrase':
+        'मैंने अपना रिकवरी फ़्रेज़ (mnemonic/seed) सुरक्षित रूप से सेव कर लिया है।',
+    'nextStep': 'अगला कदम',
+    'descriptiveAccountName': 'अपने अकाउंट के लिए एक वर्णनात्मक नाम',
+    'enableBiometricAuthentication': 'बायोमेट्रिक प्रमाणीकरण सक्षम करें',
+    'passwordForReefApp': 'रीफ ऐप के लिए पासवर्ड',
+    'repeatPasswordForVerification': 'सत्यापन के लिए पासवर्ड दोहराएं',
+    'importFromPhrase': 'फ़्रेज़ से इंपोर्ट करें',
+    'enterMnemonicPhrase': 'म्नेमोनिक फ़्रेज़ दर्ज करें...',
+    'importLabel': 'इंपोर्ट',
+    'addressCopied': 'पता कॉपी हुआ',
+    'recoveryPhraseCopied': 'रिकवरी फ़्रेज़ कॉपी हुआ',
+    'noName': '<कोई नाम नहीं>',
+  },
+  'it': <String, String>{
+    'home': 'Home',
+    'wallet': 'Portafoglio',
+    'pools': 'Pool',
+    'settings': 'Impostazioni',
+    'tokens': 'Token',
+    'nfts': 'NFT',
+    'myAccount': 'Il Mio Account',
+    'buyReef': 'Compra Reef',
+    'add': 'Aggiungi',
+    'addAccount': 'Aggiungi Account',
+    'noAccountAvailable':
+        'Nessun account disponibile, crea o importa un account per vedere i tuoi asset.',
+    'noTokensFound': 'Nessun token trovato',
+    'noNftsFound': 'Nessun NFT trovato',
+    'balanceTitle': 'Saldo',
+    'priceLabel': 'Prezzo: \$0.00',
+    'send': 'INVIA',
+    'transferFailed': 'Trasferimento fallito',
+    'walletConnect': 'WalletConnect',
+    'goHomeOnSwitch': 'Vai alla Home al cambio account',
+    'biometricAuth': 'Autenticazione Biomentrica',
+    'changePassword': 'Cambia Password',
+    'selectLanguage': 'Seleziona Lingua',
+    'developerSettings': 'Impostazioni Sviluppatore',
+    'editRpc': 'Modifica RPC',
+    'rpcEndpoint': 'Endpoint RPC',
+    'cancel': 'Annulla',
+    'save': 'Salva',
+    'languageEnglish': 'Inglese',
+    'languageHindi': 'Hindi',
+    'languageItalian': 'Italiano',
+    'changeLanguage': 'Cambia Lingua',
+    'sendToken': 'Invia Token',
+    'recipientAddress': 'Indirizzo Destinatario',
+    'amount': 'Importo',
+    'transactionSubmitted': 'Transazione inviata',
+    'invalidAddressOrAmount': 'Inserisci indirizzo e importo validi',
+    'noWalletConnectYet':
+        'L\'abbinamento WalletConnect non è ancora configurato.',
+    'scanQr': 'Scansiona QR',
+    'stopScan': 'Ferma Scansione',
+    'scannedUri': 'URI Scansionato',
+    'copied': 'Copiato',
+    'setPassword': 'Imposta Password App',
+    'newPassword': 'Nuova Password',
+    'confirmPassword': 'Conferma Password',
+    'enterAppPassword': 'Inserisci Password App',
+    'invalidPassword': 'Password non valida',
+    'passwordMismatch': 'Le password non coincidono',
+    'passwordSaved': 'Password salvata',
+    'initialisingApp': 'Inizializzazione app',
+    'appLocked': 'App bloccata',
+    'unlock': 'Sblocca',
+    'selected': 'Selezionato',
+    'addressLabel': 'Indirizzo',
+    'selectAccount': 'Seleziona Account',
+    'copyEvmAddress': 'Copia Indirizzo EVM',
+    'accountSelected': 'Account selezionato',
+    'evmAddressCopied': 'Indirizzo EVM copiato',
+    'deleteAccount': 'Elimina account',
+    'deleteAccountConfirm': 'Questo cancellerà l\'account attualmente attivo.',
+    'deleteLabel': 'Elimina',
+    'exportAccount': 'Esporta Account',
+    'mnemonicCopiedForExport': 'Mnemonic copiato per l\'esportazione',
+    'privateKeyCopiedForExport': 'Chiave privata copiata per l\'esportazione',
+    'tokenPools': 'Pool Token',
+    'errorPrefix': 'Errore',
+    'tvlLabel': 'TVL',
+    'volume24hLabel': 'Vol. 24h',
+    'addAccountTitle': 'Aggiungi Account',
+    'createNew': 'Crea nuovo',
+    'importRecoveryPhrase': 'Importa frase di recupero',
+    'failedToCreateAccount': 'Creazione account non riuscita',
+    'generatedRecoveryPhrase':
+        'FRASE DI RECUPERO DI 12 PAROLE GENERATA (MNEMONIC):',
+    'copyToClipboard': 'Copia negli appunti',
+    'recoveryPhraseWarning':
+        'Scrivi il seed mnemonico del wallet e conservalo in un posto sicuro. Puoi usarlo per ripristinare il wallet.',
+    'savedRecoveryPhrase':
+        'Ho salvato in sicurezza la mia recovery phrase (mnemonic/seed).',
+    'nextStep': 'Passo successivo',
+    'descriptiveAccountName': 'UN NOME DESCRITTIVO PER IL TUO ACCOUNT',
+    'enableBiometricAuthentication': 'Abilita autenticazione biometrica',
+    'passwordForReefApp': 'UNA PASSWORD PER L\'APP REEF',
+    'repeatPasswordForVerification': 'RIPETI LA PASSWORD PER LA VERIFICA',
+    'importFromPhrase': 'Importa da frase',
+    'enterMnemonicPhrase': 'Inserisci frase mnemonica...',
+    'importLabel': 'Importa',
+    'addressCopied': 'Indirizzo copiato',
+    'recoveryPhraseCopied': 'Recovery phrase copiata',
+    'noName': '<Nessun nome>',
+  },
+};

@@ -25,4 +25,14 @@ class Styles {
   static const LinearGradient buttonGradient = LinearGradient(
     colors: [purpleColorLight, secondaryAccentColorDark],
   );
+
+  // Typography scale
+  static const double fsDisplay = 32;
+  static const double fsPageTitle = 32;
+  static const double fsSectionTitle = 22;
+  static const double fsCardTitle = 18;
+  static const double fsBody = 16;
+  static const double fsBodyStrong = 16;
+  static const double fsCaption = 14;
+  static const double fsSmall = 12;
 }

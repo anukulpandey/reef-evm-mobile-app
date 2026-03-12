@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../core/theme/styles.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/service_providers.dart';
 import 'main_navigation_screen.dart';
-import '../core/theme/styles.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -16,6 +18,9 @@ class AuthScreen extends ConsumerStatefulWidget {
 class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool _isAuthenticated = false;
   bool _isChecking = true;
+  bool _requiresPassword = false;
+  bool _passwordError = false;
+  final TextEditingController _passwordController = TextEditingController();
 
   @override
   void initState() {
@@ -23,20 +28,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _checkAuth();
   }
 
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkAuth() async {
     final authService = ref.read(authServiceProvider);
     final isAuth = await authService.authenticate();
+    final hasPassword = await authService.hasAppPassword();
 
-    if (mounted) {
-      setState(() {
-        _isAuthenticated = isAuth;
-        _isChecking = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _isAuthenticated = isAuth;
+      _isChecking = false;
+      _requiresPassword = hasPassword;
+      _passwordError = false;
+      if (isAuth) {
+        _passwordController.clear();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     if (_isChecking) {
       return Scaffold(
         backgroundColor: Styles.splashBackgroundColor,
@@ -44,13 +61,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset("assets/images/intro.gif", height: 128, width: 128),
+              Image.asset('assets/images/intro.gif', height: 128, width: 128),
               const Gap(24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    "Initializing app",
+                    l10n.initialisingApp,
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w400,
                       fontSize: 16,
@@ -63,7 +80,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     width: 12,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Styles.textLightColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Styles.textLightColor,
+                      ),
                     ),
                   ),
                 ],
@@ -81,9 +100,37 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset("assets/images/intro.gif", height: 128, width: 128),
+              Image.asset('assets/images/intro.gif', height: 128, width: 128),
               const Gap(24),
-              const Text("App is Locked", style: TextStyle(fontSize: 24, color: Styles.textColor, fontWeight: FontWeight.bold)),
+              Text(
+                l10n.appLocked,
+                style: const TextStyle(
+                  fontSize: 24,
+                  color: Styles.textColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (_requiresPassword) ...[
+                const Gap(16),
+                SizedBox(
+                  width: 280,
+                  child: TextField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    onChanged: (_) {
+                      if (_passwordError) {
+                        setState(() => _passwordError = false);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText: l10n.enterAppPassword,
+                      errorText: _passwordError ? l10n.invalidPassword : null,
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
               const Gap(24),
               Container(
                 decoration: BoxDecoration(
@@ -94,11 +141,40 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 15,
+                    ),
                   ),
-                  onPressed: _checkAuth,
-                  child: const Text("Unlock", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  onPressed: () async {
+                    if (!_requiresPassword) {
+                      _checkAuth();
+                      return;
+                    }
+
+                    final ok = await ref
+                        .read(authServiceProvider)
+                        .verifyAppPassword(_passwordController.text);
+                    if (!mounted) return;
+                    if (ok) {
+                      setState(() {
+                        _isAuthenticated = true;
+                        _passwordError = false;
+                      });
+                      return;
+                    }
+                    setState(() => _passwordError = true);
+                  },
+                  child: Text(
+                    l10n.unlock,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ],

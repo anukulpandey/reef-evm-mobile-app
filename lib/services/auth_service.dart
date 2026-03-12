@@ -3,16 +3,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   final LocalAuthentication auth = LocalAuthentication();
+  static const String _appPasswordKey = 'app_password';
 
   Future<bool> authenticate() async {
     final prefs = await SharedPreferences.getInstance();
     final bool useBiometrics = prefs.getBool('use_biometrics') ?? false;
+    final hasPassword =
+        (prefs.getString(_appPasswordKey)?.trim() ?? '').isNotEmpty;
 
     if (!useBiometrics) {
-      // By default, if biometrics aren't explicitly enabled, we still want to protect launch
-      // For this test app, we'll allow passthrough if not explicitly enabled, but typically
-      // we'd prompt for a custom PIN.
-      return true;
+      return !hasPassword;
     }
 
     try {
@@ -29,7 +29,7 @@ class AuthService {
           ),
         );
       }
-      return true; // Fallback if device doesn't support
+      return !hasPassword; // Fallback if device doesn't support
     } catch (e) {
       print('Auth error: $e');
       return false;
@@ -44,5 +44,23 @@ class AuthService {
   Future<bool> isBiometricsEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('use_biometrics') ?? false;
+  }
+
+  Future<void> setAppPassword(String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_appPasswordKey, password);
+  }
+
+  Future<bool> hasAppPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    final password = prefs.getString(_appPasswordKey)?.trim() ?? '';
+    return password.isNotEmpty;
+  }
+
+  Future<bool> verifyAppPassword(String input) async {
+    final prefs = await SharedPreferences.getInstance();
+    final password = prefs.getString(_appPasswordKey)?.trim() ?? '';
+    if (password.isEmpty) return true;
+    return input.trim() == password;
   }
 }

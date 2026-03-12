@@ -1,14 +1,21 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:sliver_tools/sliver_tools.dart';
+import '../models/token.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/wallet_provider.dart';
 import '../core/theme/styles.dart';
+import '../utils/token_icon_resolver.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
+import 'wallet_connect_screen.dart';
 import 'package:flutter/services.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -24,6 +31,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       body: Container(
@@ -45,7 +53,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: topBar(
                   context,
                   walletState.activeAccount?.address,
-                  'Account 1',
+                  walletState.displayAccountName,
+                  onWalletConnectTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WalletConnectScreen(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -55,17 +68,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 slivers: [
                   SliverPersistentHeader(
                     delegate: _BalanceHeaderDelegate(
-                      balance: walletState.balance,
+                      portfolioUsd: walletState.portfolioUsd,
                       showBalance: walletState.showBalance,
-                      onToggleVisibility: () => ref.read(walletProvider.notifier).toggleBalanceVisibility(),
+                      balanceTitle: l10n.balanceTitle,
+                      onToggleVisibility: () => ref
+                          .read(walletProvider.notifier)
+                          .toggleBalanceVisibility(),
                     ),
                   ),
-                  SliverPinnedHeader(
-                    child: _buildNavSection(),
-                  ),
+                  SliverPinnedHeader(child: _buildNavSection()),
                   if (walletState.activeAccount == null)
                     SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 32,
+                      ),
                       sliver: SliverToBoxAdapter(
                         child: _buildNoAccountState(context),
                       ),
@@ -82,6 +99,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildNavSection() {
+    final l10n = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 12, left: 12, right: 12),
@@ -90,13 +108,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: Styles.primaryBackgroundColor,
         boxShadow: [
           BoxShadow(
-            color: const HSLColor.fromAHSL(1, 256.3636363636, 0.379310344828, 0.843137254902).toColor(),
+            color: const HSLColor.fromAHSL(
+              1,
+              256.3636363636,
+              0.379310344828,
+              0.843137254902,
+            ).toColor(),
             offset: const Offset(10, 10),
             blurRadius: 20,
             spreadRadius: -5,
           ),
           BoxShadow(
-            color: const HSLColor.fromAHSL(1, 256.3636363636, 0.379310344828, 1).toColor(),
+            color: const HSLColor.fromAHSL(
+              1,
+              256.3636363636,
+              0.379310344828,
+              1,
+            ).toColor(),
             offset: const Offset(-10, -10),
             blurRadius: 20,
             spreadRadius: -5,
@@ -108,8 +136,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _buildNavItem(0, "Tokens"),
-            _buildNavItem(1, "NFTs"),
+            _buildNavItem(0, l10n.tokens),
+            _buildNavItem(1, l10n.nfts),
           ],
         ),
       ),
@@ -130,7 +158,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           borderRadius: BorderRadius.circular(9),
           color: isSelected ? Styles.whiteColor : Colors.transparent,
           boxShadow: isSelected
-              ? [const BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, 2.5))]
+              ? [
+                  const BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 5,
+                    offset: Offset(0, 2.5),
+                  ),
+                ]
               : [],
         ),
         child: Text(
@@ -138,7 +172,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: isSelected ? Styles.textColor : Styles.textColor.withOpacity(0.5),
+            color: isSelected
+                ? Styles.textColor
+                : Styles.textColor.withOpacity(0.5),
           ),
         ),
       ),
@@ -146,14 +182,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildNoAccountState(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       children: [
-        const Icon(Icons.account_balance_wallet_outlined, size: 60, color: Styles.textLightColor),
+        const Icon(
+          Icons.account_balance_wallet_outlined,
+          size: 60,
+          color: Styles.textLightColor,
+        ),
         const Gap(16),
-        const Text(
-          "No account currently available, create or import an account to view your assets.",
+        Text(
+          l10n.noAccountAvailable,
           textAlign: TextAlign.center,
-          style: TextStyle(color: Styles.textLightColor, fontSize: 14),
+          style: const TextStyle(color: Styles.textLightColor, fontSize: 14),
         ),
         const Gap(24),
         Container(
@@ -173,7 +214,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(40),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
             ),
             onPressed: () {
@@ -184,7 +227,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 builder: (context) => const AddAccountModal(),
               );
             },
-            child: const Text('Add Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            child: Text(
+              l10n.addAccount,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
           ),
         ),
       ],
@@ -192,34 +242,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildMainContent(WalletState state) {
+    final l10n = AppLocalizations.of(context);
     if (_currentIndex == 0) {
+      final tokens = state.portfolioTokens;
+      if (tokens.isEmpty) {
+        return SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40.0),
+              child: Text(
+                l10n.noTokensFound,
+                style: const TextStyle(color: Styles.textLightColor),
+              ),
+            ),
+          ),
+        );
+      }
+
       return SliverPadding(
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 12),
         sliver: SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 18.0),
-                child: _buildTokenCard("Ethereum", "Native", state.balance, null),
-              );
-            },
-            childCount: 1,
-          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final token = tokens[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 18.0),
+              child: _buildTokenCard(token),
+            );
+          }, childCount: tokens.length),
         ),
       );
     } else {
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: Center(
           child: Padding(
-            padding: EdgeInsets.all(40.0),
-            child: Text("No NFTs found", style: TextStyle(color: Styles.textLightColor)),
+            padding: const EdgeInsets.all(40.0),
+            child: Text(
+              l10n.noNftsFound,
+              style: const TextStyle(color: Styles.textLightColor),
+            ),
           ),
         ),
       );
     }
   }
 
-  Widget _buildTokenCard(String name, String symbol, String balance, String? iconUrl) {
+  Widget _buildTokenCard(Token token) {
+    final l10n = AppLocalizations.of(context);
     return ViewBoxContainer(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -227,17 +295,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             Row(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 24,
                   backgroundColor: Colors.white,
-                  child: Image(image: AssetImage("assets/images/reef.png"), width: 32, height: 32),
+                  child: _buildTokenIcon(token),
                 ),
                 const Gap(15),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w700)),
-                    const Text("Price: \$0.00", style: TextStyle(color: Styles.textLightColor, fontSize: 14)),
+                    Text(
+                      token.name,
+                      style: GoogleFonts.poppins(
+                        color: Styles.textColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _formatUsdPrice(token.usdPrice ?? 0),
+                      style: const TextStyle(
+                        color: Styles.textLightColor,
+                        fontSize: 14,
+                      ),
+                    ),
                   ],
                 ),
                 const Spacer(),
@@ -245,11 +326,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     GradientText(
-                      '\$$balance',
+                      _formatUsdValue(token.usdValue ?? 0),
                       gradient: textGradient(),
-                      style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w900),
+                      style: GoogleFonts.poppins(
+                        color: Styles.textColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                    Text('$balance $symbol', style: const TextStyle(color: Styles.textColor, fontWeight: FontWeight.w600)),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      child: Text(
+                        '${token.balance} ${token.symbol}',
+                        style: const TextStyle(
+                          color: Styles.textColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -264,14 +361,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       gradient: Styles.buttonGradient,
                     ),
                     child: ElevatedButton.icon(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 16),
-                      label: const Text("SEND", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      icon: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      label: Text(
+                        l10n.send,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
                         shape: const StadiumBorder(),
                       ),
-                      onPressed: () {},
+                      onPressed: () => _showSendTokenDialog(context, token),
                     ),
                   ),
                 ),
@@ -282,17 +389,223 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildTokenIcon(Token token) {
+    final iconUrl =
+        token.iconUrl ??
+        TokenIconResolver.resolveTokenIconUrl(
+          address: token.address,
+          symbol: token.symbol,
+        );
+    final imageProvider = _resolveImageProvider(iconUrl);
+    final svgData = _resolveSvgData(iconUrl);
+
+    if (svgData != null) {
+      return ClipOval(
+        child: SvgPicture.string(
+          svgData,
+          width: 32,
+          height: 32,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    if (imageProvider != null) {
+      return ClipOval(
+        child: Image(
+          image: imageProvider,
+          width: 32,
+          height: 32,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.circle, color: Styles.primaryColor, size: 14),
+        ),
+      );
+    }
+
+    return const Icon(Icons.circle, color: Styles.primaryColor, size: 14);
+  }
+
+  static ImageProvider? _resolveImageProvider(String? iconUrl) {
+    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
+    final normalized = iconUrl.trim();
+    final dataUri = _tryParseDataUri(normalized);
+    if (dataUri != null) {
+      if (dataUri.mimeType.contains('svg')) return null;
+      final bytes = dataUri.contentAsBytes();
+      if (bytes.isEmpty) return null;
+      return MemoryImage(bytes);
+    }
+
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+
+    return NetworkImage(normalized);
+  }
+
+  static String? _resolveSvgData(String? iconUrl) {
+    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
+    final uriData = _tryParseDataUri(iconUrl.trim());
+    if (uriData == null || !uriData.mimeType.contains('svg')) return null;
+    final bytes = uriData.contentAsBytes();
+    if (bytes.isEmpty) return null;
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  static UriData? _tryParseDataUri(String value) {
+    if (!value.startsWith('data:')) return null;
+    try {
+      return UriData.parse(value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _showSendTokenDialog(BuildContext context, Token token) async {
+    final l10n = AppLocalizations.of(context);
+    final recipientController = TextEditingController();
+    final amountController = TextEditingController();
+    bool isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text('${l10n.sendToken} (${token.symbol})'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: recipientController,
+                  decoration: InputDecoration(labelText: l10n.recipientAddress),
+                ),
+                const Gap(10),
+                TextField(
+                  controller: amountController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(labelText: l10n.amount),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () => Navigator.pop(dialogContext),
+                child: Text(l10n.cancel),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final to = recipientController.text.trim();
+                        final amount = amountController.text.trim();
+                        final isAddress = RegExp(
+                          r'^0x[a-fA-F0-9]{40}$',
+                        ).hasMatch(to);
+                        final parsedAmount = double.tryParse(amount);
+                        if (!isAddress ||
+                            parsedAmount == null ||
+                            parsedAmount <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.invalidAddressOrAmount),
+                            ),
+                          );
+                          return;
+                        }
+
+                        setState(() => isSubmitting = true);
+                        try {
+                          final txHash = await ref
+                              .read(walletProvider.notifier)
+                              .transferToken(
+                                token: token,
+                                to: to,
+                                amount: amount,
+                              );
+                          if (!context.mounted) return;
+                          Navigator.pop(dialogContext);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${l10n.transactionSubmitted}: ${txHash.substring(0, 10)}...',
+                              ),
+                            ),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          setState(() => isSubmitting = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${l10n.transferFailed}: $e'),
+                            ),
+                          );
+                        }
+                      },
+                child: isSubmitting
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(l10n.send),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static String _formatUsdPrice(double value) {
+    if (!value.isFinite || value <= 0) return 'Price: \$0.00';
+    if (value >= 1) {
+      return 'Price: ${NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(value)}';
+    }
+    return 'Price: ${NumberFormat.currency(symbol: '\$', decimalDigits: 6).format(value)}';
+  }
+
+  static String _formatUsdValue(double value) {
+    if (!value.isFinite || value <= 0) return '\$0.00';
+    if (value >= 0.01) {
+      return NumberFormat.currency(
+        symbol: '\$',
+        decimalDigits: 2,
+      ).format(value);
+    }
+    return NumberFormat.currency(symbol: '\$', decimalDigits: 6).format(value);
+  }
 }
 
 class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final String balance;
+  final double portfolioUsd;
   final bool showBalance;
+  final String balanceTitle;
   final VoidCallback onToggleVisibility;
 
-  _BalanceHeaderDelegate({required this.balance, required this.showBalance, required this.onToggleVisibility});
+  _BalanceHeaderDelegate({
+    required this.portfolioUsd,
+    required this.showBalance,
+    required this.balanceTitle,
+    required this.onToggleVisibility,
+  });
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    if (shrinkOffset > 80) {
+      return const SizedBox.shrink();
+    }
     double opacity = ((shrinkOffset - 180) / 180).abs();
     if (opacity < 0) opacity = 0;
     if (opacity > 1) opacity = 1;
@@ -307,16 +620,36 @@ class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text("Balance", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Styles.primaryColor)),
+                Text(
+                  balanceTitle,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: Styles.primaryColor,
+                  ),
+                ),
                 IconButton(
-                  icon: Icon(showBalance ? Icons.remove_red_eye : Icons.visibility_off, color: Styles.textLightColor),
+                  icon: Icon(
+                    showBalance ? Icons.remove_red_eye : Icons.visibility_off,
+                    color: Styles.textLightColor,
+                  ),
                   onPressed: onToggleVisibility,
                 ),
               ],
             ),
             Center(
               child: GradientText(
-                showBalance ? '\$$balance' : '******',
+                showBalance
+                    ? (portfolioUsd >= 0.01
+                          ? NumberFormat.currency(
+                              symbol: '\$',
+                              decimalDigits: 2,
+                            ).format(portfolioUsd)
+                          : NumberFormat.currency(
+                              symbol: '\$',
+                              decimalDigits: 6,
+                            ).format(portfolioUsd))
+                    : '******',
                 gradient: textGradient(),
                 style: GoogleFonts.poppins(
                   fontSize: 48,
@@ -337,5 +670,6 @@ class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   double get minExtent => 0;
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => true;
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      true;
 }
