@@ -70,13 +70,14 @@ class Web3Service {
     try {
       final credentials = EthPrivateKey.fromHex(account.privateKey);
       final wei = _parseAmountToRaw(amountStr, 18);
+      final chainId = await _resolveChainId();
       final txHash = await _client.sendTransaction(
         credentials,
         Transaction(
           to: EthereumAddress.fromHex(to),
           value: EtherAmount.inWei(wei),
         ),
-        chainId: null,
+        chainId: chainId,
       );
       return txHash;
     } catch (e) {
@@ -94,6 +95,7 @@ class Web3Service {
   }) async {
     try {
       final credentials = EthPrivateKey.fromHex(account.privateKey);
+      final chainId = await _resolveChainId();
       final contract = DeployedContract(
         ContractAbi.fromJson(
           '[{"constant":false,"inputs":[{"name":"to","type":"address"},{"name":"value","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}]',
@@ -111,7 +113,7 @@ class Web3Service {
           function: transfer,
           parameters: <dynamic>[EthereumAddress.fromHex(to), amountRaw],
         ),
-        chainId: null,
+        chainId: chainId,
       );
       return txHash;
     } catch (e) {
@@ -210,5 +212,42 @@ class Web3Service {
         : BigInt.parse(paddedFraction);
 
     return whole * BigInt.from(10).pow(decimals) + fraction;
+  }
+
+  Future<int> _resolveChainId() async {
+    try {
+      final response = await _httpClient.post(
+        Uri.parse(_rpcUrl),
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode({
+          'jsonrpc': '2.0',
+          'method': 'eth_chainId',
+          'params': <dynamic>[],
+          'id': 1,
+        }),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final payload = jsonDecode(response.body);
+        if (payload is Map<String, dynamic>) {
+          final result = payload['result'];
+          if (result is String && result.trim().isNotEmpty) {
+            final text = result.trim();
+            if (text.startsWith('0x')) {
+              return int.parse(text.substring(2), radix: 16);
+            }
+            return int.parse(text);
+          }
+        }
+      }
+    } catch (_) {
+      // Fall through to net_version below.
+    }
+
+    try {
+      return await _client.getNetworkId();
+    } catch (_) {
+      // Default Ethereum mainnet ID only as last fallback.
+      return 1;
+    }
   }
 }

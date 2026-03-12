@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
@@ -15,8 +16,8 @@ import '../utils/token_icon_resolver.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
+import 'send_screen.dart';
 import 'wallet_connect_screen.dart';
-import 'package:flutter/services.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -465,103 +466,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _showSendTokenDialog(BuildContext context, Token token) async {
-    final l10n = AppLocalizations.of(context);
-    final recipientController = TextEditingController();
-    final amountController = TextEditingController();
-    bool isSubmitting = false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: Text('${l10n.sendToken} (${token.symbol})'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: recipientController,
-                  decoration: InputDecoration(labelText: l10n.recipientAddress),
-                ),
-                const Gap(10),
-                TextField(
-                  controller: amountController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(labelText: l10n.amount),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () => Navigator.pop(dialogContext),
-                child: Text(l10n.cancel),
-              ),
-              ElevatedButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () async {
-                        final to = recipientController.text.trim();
-                        final amount = amountController.text.trim();
-                        final isAddress = RegExp(
-                          r'^0x[a-fA-F0-9]{40}$',
-                        ).hasMatch(to);
-                        final parsedAmount = double.tryParse(amount);
-                        if (!isAddress ||
-                            parsedAmount == null ||
-                            parsedAmount <= 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(l10n.invalidAddressOrAmount),
-                            ),
-                          );
-                          return;
-                        }
-
-                        setState(() => isSubmitting = true);
-                        try {
-                          final txHash = await ref
-                              .read(walletProvider.notifier)
-                              .transferToken(
-                                token: token,
-                                to: to,
-                                amount: amount,
-                              );
-                          if (!context.mounted) return;
-                          Navigator.pop(dialogContext);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${l10n.transactionSubmitted}: ${txHash.substring(0, 10)}...',
-                              ),
-                            ),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          setState(() => isSubmitting = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${l10n.transferFailed}: $e'),
-                            ),
-                          );
-                        }
-                      },
-                child: isSubmitting
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(l10n.send),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SendScreen(token: token)));
   }
 
   static String _formatUsdPrice(double value) {
