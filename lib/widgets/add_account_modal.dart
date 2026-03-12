@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
 import '../providers/wallet_provider.dart';
-import '../core/theme/app_colors.dart';
+import '../core/theme/styles.dart';
 
 class AddAccountModal extends ConsumerWidget {
   const AddAccountModal({super.key});
@@ -11,11 +12,8 @@ class AddAccountModal extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(30),
-          topRight: Radius.circular(30),
-        ),
+        color: Styles.primaryBackgroundColor,
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -23,17 +21,11 @@ class AddAccountModal extends ConsumerWidget {
           Container(
             width: 50,
             height: 5,
-            decoration: BoxDecoration(
-              color: Colors.white30,
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(10)),
           ),
-          const SizedBox(height: 30),
-          const Text(
-            "Add Account",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 30),
+          const Gap(30),
+          const Text("Add Account", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Styles.primaryColor)),
+          const Gap(30),
           _buildOption(
             icon: Icons.add_circle_outline,
             title: "Create new",
@@ -44,52 +36,23 @@ class AddAccountModal extends ConsumerWidget {
           ),
           _buildOption(
             icon: Icons.restore,
-            title: "Import from recovery phrase",
+            title: "Import recovery phrase",
             onTap: () {
               Navigator.pop(context);
               _showImportPhraseDialog(context, ref);
             },
           ),
-          _buildOption(
-            icon: Icons.file_upload_outlined,
-            title: "Import from JSON file",
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Not implemented yet')),
-              );
-            },
-          ),
-          _buildOption(
-            icon: Icons.qr_code_scanner,
-            title: "Import from QR code",
-            onTap: () {
-              Navigator.pop(context);
-              // Navigate to QR scanner
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Not implemented yet')),
-              );
-            },
-          ),
-          const SizedBox(height: 40),
+          const Gap(40),
         ],
       ),
     );
   }
 
-  Widget _buildOption({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildOption({required IconData icon, required String title, required VoidCallback onTap}) {
     return ListTile(
-      leading: Icon(icon, color: AppColors.accent),
-      title: Text(title, style: const TextStyle(fontSize: 16)),
-      trailing: const Icon(
-        Icons.arrow_forward_ios,
-        size: 16,
-        color: Colors.white54,
-      ),
+      leading: Icon(icon, color: Styles.purpleColor),
+      title: Text(title, style: const TextStyle(fontSize: 16, color: Styles.textColor, fontWeight: FontWeight.w600)),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black26),
       onTap: onTap,
     );
   }
@@ -100,30 +63,25 @@ class AddAccountModal extends ConsumerWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: AppColors.background,
-          title: const Text("Import from Phrase"),
+          backgroundColor: Styles.whiteColor,
+          title: const Text("Import from Phrase", style: TextStyle(color: Styles.primaryColor)),
           content: TextField(
             controller: controller,
             maxLines: 3,
+            style: const TextStyle(color: Styles.textColor),
             decoration: const InputDecoration(
-              hintText: "Enter 12 or 24 word mnemonic phrase...",
-              filled: true,
-              fillColor: Colors.black26,
+              hintText: "Enter mnemonic phrase...",
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Styles.purpleColor)),
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
             TextButton(
               onPressed: () async {
                 final phrase = controller.text.trim();
                 Navigator.pop(context);
                 if (phrase.isNotEmpty) {
-                  await ref
-                      .read(walletProvider.notifier)
-                      .importMnemonic(phrase);
+                  await ref.read(walletProvider.notifier).importMnemonic(phrase);
                 }
               },
               child: const Text("Import"),

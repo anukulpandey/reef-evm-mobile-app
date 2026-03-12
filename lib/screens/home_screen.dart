@@ -1,93 +1,299 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:sliver_tools/sliver_tools.dart';
 import '../providers/wallet_provider.dart';
-import '../widgets/gradient_header.dart';
+import '../core/theme/styles.dart';
+import '../widgets/official_top_bar.dart';
+import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
-import '../core/theme/app_colors.dart';
+import 'package:flutter/services.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int _currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
 
     return Scaffold(
-      body: Column(
-        children: [
-          GradientHeader(
-            leading: const Icon(
-              Icons.waves,
-              color: Colors.white,
-              size: 30,
-            ), // Placeholder Reef logo
-            title: const Text(
-              'Reef',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      body: Container(
+        color: Styles.primaryBackgroundColor,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                Material(
+                  elevation: 3,
+                  shadowColor: Colors.black45,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: const BoxDecoration(
+                      image: DecorationImage(
+                        image: AssetImage("assets/images/reef-header.png"),
+                        fit: BoxFit.cover,
+                        alignment: Alignment(-0.82, 1.0),
+                      ),
+                    ),
+                    child: topBar(
+                      context,
+                      walletState.activeAccount?.address,
+                      'Account 1', // Placeholder name
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      SliverPersistentHeader(
+                        delegate: _BalanceHeaderDelegate(
+                          balance: walletState.balance,
+                          showBalance: walletState.showBalance,
+                          onToggleVisibility: () => ref.read(walletProvider.notifier).toggleBalanceVisibility(),
+                        ),
+                      ),
+                      SliverPinnedHeader(
+                        child: _buildNavSection(),
+                      ),
+                      if (walletState.activeAccount == null)
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+                          sliver: SliverToBoxAdapter(
+                            child: _buildNoAccountState(context),
+                          ),
+                        )
+                      else
+                        _buildMainContent(walletState),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
-                onPressed: () {
-                  // Navigate to QR scanner
-                },
-              ),
-            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavSection() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        color: Styles.primaryBackgroundColor,
+        boxShadow: [
+          BoxShadow(
+            color: const HSLColor.fromAHSL(1, 256.3636363636, 0.379310344828, 0.843137254902).toColor(),
+            offset: const Offset(10, 10),
+            blurRadius: 20,
+            spreadRadius: -5,
           ),
-          Expanded(
-            child: walletState.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : walletState.activeAccount == null
-                ? _buildNoAccountState(context)
-                : _buildDashboard(context, ref, walletState),
+          BoxShadow(
+            color: const HSLColor.fromAHSL(1, 256.3636363636, 0.379310344828, 1).toColor(),
+            offset: const Offset(-10, -10),
+            blurRadius: 20,
+            spreadRadius: -5,
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildNavItem(0, "Tokens"),
+            _buildNavItem(1, "NFTs"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, String label) {
+    bool isSelected = _currentIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _currentIndex = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          color: isSelected ? Styles.whiteColor : Colors.transparent,
+          boxShadow: isSelected
+              ? [const BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, 2.5))]
+              : [],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Styles.textColor : Styles.textColor.withOpacity(0.5),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildNoAccountState(BuildContext context) {
-    return Center(
+    return Column(
+      children: [
+        const Icon(Icons.account_balance_wallet_outlined, size: 60, color: Styles.textLightColor),
+        const Gap(16),
+        const Text(
+          "No account currently available, create or import an account to view your assets.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Styles.textLightColor, fontSize: 14),
+        ),
+        const Gap(24),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Styles.secondaryAccentColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+          ),
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => const AddAccountModal(),
+            );
+          },
+          child: const Text('Add Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainContent(WalletState state) {
+    if (_currentIndex == 0) {
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 12),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 18.0),
+                child: _buildTokenCard("Ethereum", "Native", state.balance, null),
+              );
+            },
+            childCount: 1,
+          ),
+        ),
+      );
+    } else {
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(40.0),
+            child: Text("No NFTs found", style: TextStyle(color: Styles.textLightColor)),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildTokenCard(String name, String symbol, String balance, String? iconUrl) {
+    return ViewBoxContainer(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.purple,
+                  child: Icon(Icons.waves, color: Colors.white),
+                ),
+                const Gap(15),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w700)),
+                    const Text("Price: $0.00", style: TextStyle(color: Styles.textLightColor, fontSize: 14)),
+                  ],
+                ),
+                const Spacer(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('\$$balance', style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w900)),
+                    Text('$balance $symbol', style: const TextStyle(color: Styles.textColor, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ],
+            ),
+            const Gap(15),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(80),
+                      gradient: Styles.buttonGradient,
+                    ),
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.send, color: Colors.white, size: 16),
+                      label: const Text("SEND", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent),
+                      onPressed: () {},
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String balance;
+  final bool showBalance;
+  final VoidCallback onToggleVisibility;
+
+  _BalanceHeaderDelegate({required this.balance, required this.showBalance, required this.onToggleVisibility});
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Opacity(
+      opacity: ((shrinkOffset - 200) / 200).abs(),
+      child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 80,
-              color: Colors.white54,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              "No account currently available, create or import an account to view your assets.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.white70),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 15,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Balance", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Styles.primaryColor)),
+                IconButton(
+                  icon: Icon(showBalance ? Icons.remove_red_eye : Icons.visibility_off, color: Styles.textLightColor),
+                  onPressed: onToggleVisibility,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-              ),
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (context) => const AddAccountModal(),
-                );
-              },
-              child: const Text(
-                'Add Account',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ],
+            ),
+            Text(
+              showBalance ? '\$$balance' : '******',
+              style: GoogleFonts.poppins(
+                fontSize: 48,
+                fontWeight: FontWeight.w800,
+                color: Styles.textColor,
+                letterSpacing: 2,
               ),
             ),
           ],
@@ -96,138 +302,10 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDashboard(
-    BuildContext context,
-    WidgetRef ref,
-    WalletState state,
-  ) {
-    return RefreshIndicator(
-      onRefresh: () async => ref.read(walletProvider.notifier).refreshBalance(),
-      child: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Balance Section
-          Center(
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      state.showBalance ? '\$ \${state.balance}' : '******',
-                      style: const TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        state.showBalance
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                        color: Colors.white70,
-                      ),
-                      onPressed: () => ref
-                          .read(walletProvider.notifier)
-                          .toggleBalanceVisibility(),
-                    ),
-                  ],
-                ),
-                Text(
-                  "\${state.activeAccount!.address.substring(0, 6)}...\${state.activeAccount!.address.substring(state.activeAccount!.address.length - 4)}",
-                  style: const TextStyle(color: Colors.white54, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 40),
-
-          // Action Buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildActionButton(Icons.send, "Send"),
-              _buildActionButton(Icons.qr_code, "Receive"),
-              _buildActionButton(Icons.swap_calls, "Swap"),
-            ],
-          ),
-
-          const SizedBox(height: 40),
-
-          // Tabs (Reload, Tokens, NFTs)
-          DefaultTabController(
-            length: 3,
-            child: Column(
-              children: [
-                const TabBar(
-                  indicatorColor: AppColors.accent,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white54,
-                  tabs: [
-                    Tab(text: "Tokens"),
-                    Tab(text: "NFTs"),
-                    Tab(text: "Activity"),
-                  ],
-                ),
-                SizedBox(
-                  height: 300,
-                  child: TabBarView(
-                    children: [
-                      _buildTokenList(),
-                      const Center(
-                        child: Text(
-                          "No NFTs found",
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      ),
-                      const Center(
-                        child: Text(
-                          "No recent activity",
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(IconData icon, String label) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 25,
-          backgroundColor: AppColors.accent.withOpacity(0.2),
-          child: Icon(icon, color: AppColors.accent),
-        ),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(color: Colors.white70)),
-      ],
-    );
-  }
-
-  Widget _buildTokenList() {
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      children: [
-        ListTile(
-          leading: const CircleAvatar(
-            backgroundColor: Colors.purple,
-            child: Icon(Icons.waves),
-          ),
-          title: const Text("Ethereum"),
-          subtitle: const Text("Native"),
-          trailing: const Text(
-            "0.0",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-        ),
-      ],
-    );
-  }
+  @override
+  double get maxExtent => 180;
+  @override
+  double get minExtent => 0;
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => true;
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
 import '../providers/pool_provider.dart';
-import '../widgets/gradient_header.dart';
-import '../widgets/glass_card.dart';
-import '../core/theme/app_colors.dart';
+import '../widgets/official_top_bar.dart';
+import '../widgets/official_components.dart';
+import '../providers/wallet_provider.dart';
+import '../core/theme/styles.dart';
 
 class PoolsScreen extends ConsumerWidget {
   const PoolsScreen({super.key});
@@ -11,16 +13,43 @@ class PoolsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final poolsAsyncValue = ref.watch(poolsProvider);
+    final walletState = ref.watch(walletProvider);
 
     return Scaffold(
+      backgroundColor: Styles.primaryBackgroundColor,
       body: Column(
         children: [
-          const GradientHeader(
-            title: Text(
-              'Token Pools',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Material(
+            elevation: 3,
+            shadowColor: Colors.black45,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage("assets/images/reef-header.png"),
+                  fit: BoxFit.cover,
+                  alignment: Alignment(-0.82, 1.0),
+                ),
+              ),
+              child: topBar(
+                context,
+                walletState.activeAccount?.address,
+                'Account 1',
+              ),
             ),
           ),
+          const Gap(16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Token Pools',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Styles.primaryColor),
+              ),
+            ),
+          ),
+          const Gap(8),
           Expanded(
             child: poolsAsyncValue.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -33,90 +62,60 @@ class PoolsScreen extends ConsumerWidget {
                     final pool = pools[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16),
-                      child: GlassCard(
-                        height: 110, // Fixed height for pool cards
-                        padding: const EdgeInsets.all(15),
-                        child: Row(
-                          children: [
-                            // Mock Icons Stack
-                            SizedBox(
-                              width: 60,
-                              height: 40,
-                              child: Stack(
-                                children: [
-                                  Positioned(
-                                    left: 0,
-                                    child: CircleAvatar(
-                                      radius: 20,
-                                      backgroundColor: Colors.blueAccent,
-                                      child: Text(pool.pairName[0]),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 20,
-                                    child: CircleAvatar(
-                                      radius: 20,
-                                      backgroundColor: Colors.purpleAccent,
-                                      child: Text(
-                                        pool.pairName
-                                            .split('-')
-                                            .last
-                                            .trim()[0],
+                      child: ViewBoxContainer(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 60,
+                                height: 40,
+                                child: Stack(
+                                  children: [
+                                    Positioned(
+                                      left: 0,
+                                      child: CircleAvatar(
+                                        radius: 18,
+                                        backgroundColor: Colors.blueAccent,
+                                        child: Text(pool.pairName[0], style: const TextStyle(fontSize: 12, color: Colors.white)),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    Positioned(
+                                      left: 18,
+                                      child: CircleAvatar(
+                                        radius: 18,
+                                        backgroundColor: Colors.purpleAccent,
+                                        child: Text(pool.pairName.split('-').last.trim()[0], style: const TextStyle(fontSize: 12, color: Colors.white)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              const Gap(12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(pool.pairName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Styles.textColor)),
+                                    Text("TVL: ${pool.tvl}", style: const TextStyle(color: Styles.textLightColor, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    pool.pairName,
-                                    style: const TextStyle(
+                                    "${pool.percentChange > 0 ? '+' : ''}${pool.percentChange}%",
+                                    style: TextStyle(
+                                      color: pool.percentChange >= 0 ? Colors.green : Colors.red,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 16,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "TVL: ${pool.tvl}",
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                  Text("Vol: ${pool.volume24h}", style: const TextStyle(color: Styles.textLightColor, fontSize: 12)),
                                 ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "${pool.percentChange > 0 ? '+' : ''}${pool.percentChange}%",
-                                  style: TextStyle(
-                                    color:
-                                        pool.percentChange >= 0
-                                            ? Colors.greenAccent
-                                            : Colors.redAccent,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "Vol: ${pool.volume24h}",
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                              )
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -124,7 +123,7 @@ class PoolsScreen extends ConsumerWidget {
                 );
               },
             ),
-          ),
+          )
         ],
       ),
     );

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
 import '../providers/settings_provider.dart';
-import '../widgets/gradient_header.dart';
-import '../core/theme/app_colors.dart';
+import '../widgets/official_top_bar.dart';
+import '../providers/wallet_provider.dart';
+import '../core/theme/styles.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -10,64 +12,64 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final walletState = ref.watch(walletProvider);
 
     return Scaffold(
+      backgroundColor: Styles.primaryBackgroundColor,
       body: Column(
         children: [
-          const GradientHeader(
-            title: Text(
-              'Settings',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Material(
+            elevation: 3,
+            shadowColor: Colors.black45,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage("assets/images/reef-header.png"),
+                  fit: BoxFit.cover,
+                  alignment: Alignment(-0.82, 1.0),
+                ),
+              ),
+              child: topBar(
+                context,
+                walletState.activeAccount?.address,
+                'Account 1',
+              ),
             ),
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               children: [
+                const Text(
+                  "Settings",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Styles.primaryColor),
+                ),
+                const Gap(16),
                 _buildSectionTitle("Security"),
                 SwitchListTile(
-                  title: const Text("Biometric Authentication"),
-                  subtitle: const Text("Require FaceID/TouchID to open"),
-                  activeColor: AppColors.accent,
+                  title: const Text("Biometric Authentication", style: TextStyle(color: Styles.textColor)),
+                  subtitle: const Text("Require FaceID/TouchID to open", style: TextStyle(color: Styles.textLightColor)),
+                  activeColor: Styles.purpleColor,
                   value: settings.useBiometrics,
                   onChanged: (val) {
                     ref.read(settingsProvider.notifier).setBiometrics(val);
                   },
                 ),
-                ListTile(
-                  title: const Text("Change Password"),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {},
-                ),
-
-                const Divider(height: 40, color: Colors.white24),
-
+                const Divider(color: Colors.black12),
                 _buildSectionTitle("General"),
                 ListTile(
-                  title: const Text("WalletConnect"),
-                  subtitle: const Text("Manage connected dApps"),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  title: const Text("WalletConnect", style: TextStyle(color: Styles.textColor)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Styles.textLightColor),
                   onTap: () {},
                 ),
+                const Divider(color: Colors.black12),
+                _buildSectionTitle("Developer"),
                 ListTile(
-                  title: const Text("Select Language"),
-                  trailing: const Text(
-                    "English >",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  onTap: () {},
-                ),
-
-                const Divider(height: 40, color: Colors.white24),
-
-                _buildSectionTitle("Developer Settings"),
-                ListTile(
-                  title: const Text("RPC Endpoint"),
-                  subtitle: Text(settings.rpcUrl),
-                  trailing: const Icon(Icons.edit, size: 16),
-                  onTap: () {
-                    _showRpcEditDialog(context, ref, settings.rpcUrl);
-                  },
+                  title: const Text("RPC Endpoint", style: TextStyle(color: Styles.textColor)),
+                  subtitle: Text(settings.rpcUrl, style: const TextStyle(color: Styles.textLightColor)),
+                  trailing: const Icon(Icons.edit, size: 16, color: Styles.purpleColor),
+                  onTap: () => _showRpcEditDialog(context, ref, settings.rpcUrl),
                 ),
               ],
             ),
@@ -79,44 +81,32 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10, top: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Text(
         title.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.accent,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-          letterSpacing: 1.2,
-        ),
+        style: const TextStyle(color: Styles.purpleColor, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2),
       ),
     );
   }
 
-  void _showRpcEditDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String currentRpc,
-  ) {
+  void _showRpcEditDialog(BuildContext context, WidgetRef ref, String currentRpc) {
     final controller = TextEditingController(text: currentRpc);
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: AppColors.background,
-          title: const Text("Edit RPC Endpoint"),
+          backgroundColor: Styles.whiteColor,
+          title: const Text("Edit RPC Endpoint", style: TextStyle(color: Styles.primaryColor)),
           content: TextField(
             controller: controller,
+            style: const TextStyle(color: Styles.textColor),
             decoration: const InputDecoration(
               hintText: "http://localhost:8545",
-              filled: true,
-              fillColor: Colors.black26,
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Styles.purpleColor)),
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
             TextButton(
               onPressed: () {
                 ref.read(settingsProvider.notifier).setRpcUrl(controller.text);

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
 import '../providers/service_providers.dart';
 import 'main_navigation_screen.dart';
-import '../core/theme/app_colors.dart';
+import '../core/theme/styles.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -37,35 +38,31 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget build(BuildContext context) {
     if (_isChecking) {
       return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+        backgroundColor: Styles.splashBackgroundColor,
+        body: Center(child: CircularProgressIndicator(color: Styles.purpleColor)),
       );
     }
 
     if (!_isAuthenticated) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: Styles.splashBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lock_outline, size: 80, color: Colors.white54),
-              const SizedBox(height: 20),
-              const Text(
-                "App is Locked",
-                style: TextStyle(fontSize: 24, color: Colors.white),
-              ),
-              const SizedBox(height: 20),
+              Image.asset("assets/images/intro.gif", height: 128, width: 128),
+              const Gap(24),
+              const Text("App is Locked", style: TextStyle(fontSize: 24, color: Styles.textColor, fontWeight: FontWeight.bold)),
+              const Gap(24),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
+                  backgroundColor: Styles.secondaryAccentColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                 ),
                 onPressed: _checkAuth,
-                child: const Text(
-                  "Unlock",
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
+                child: const Text("Unlock", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )
             ],
           ),
         ),
