@@ -381,6 +381,77 @@ class WalletNotifier extends Notifier<WalletState> {
     state = state.copyWith(accountName: value);
   }
 
+  Future<void> selectAccount(String address) async {
+    final normalized = address.trim();
+    if (normalized.isEmpty) return;
+
+    final current = state.activeAccount?.address.toLowerCase();
+    if (current == normalized.toLowerCase()) return;
+
+    final walletService = ref.read(walletServiceProvider);
+    final account = await walletService.loadAccount(normalized);
+    if (account == null) {
+      throw Exception('Account not found');
+    }
+    final savedName = await walletService.getAccountName(account.address);
+    state = state.copyWith(
+      activeAccount: account,
+      accountName: savedName ?? '<No Name>',
+      isLoading: false,
+      tokens: const <Token>[],
+      error: null,
+    );
+    await walletService.setLastActiveAccount(account.address);
+    _ensureAutoRefresh();
+    await refreshPortfolio();
+  }
+
+  Future<void> deleteAccount(String address) async {
+    final normalized = address.trim();
+    if (normalized.isEmpty) return;
+
+    final walletService = ref.read(walletServiceProvider);
+    await walletService.clearAccount(normalized);
+
+    final wasActive =
+        state.activeAccount?.address.toLowerCase() == normalized.toLowerCase();
+    if (!wasActive) {
+      // Trigger rebuild so account lists refresh.
+      state = state.copyWith(error: null);
+      return;
+    }
+
+    final remaining = await walletService.getAccounts();
+    if (remaining.isEmpty) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      state = WalletState();
+      return;
+    }
+
+    final nextAddress = remaining.first;
+    final nextAccount = await walletService.loadAccount(nextAddress);
+    if (nextAccount == null) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      state = WalletState();
+      return;
+    }
+
+    final nextName = await walletService.getAccountName(nextAccount.address);
+    state = state.copyWith(
+      activeAccount: nextAccount,
+      accountName: nextName ?? '<No Name>',
+      balance: '0.0',
+      tokens: const <Token>[],
+      isLoading: false,
+      error: null,
+    );
+    await walletService.setLastActiveAccount(nextAccount.address);
+    _ensureAutoRefresh();
+    await refreshPortfolio();
+  }
+
   Future<String> transferToken({
     required Token token,
     required String to,
@@ -389,6 +460,14 @@ class WalletNotifier extends Notifier<WalletState> {
     final account = state.activeAccount;
     if (account == null) {
       throw Exception('No active account selected');
+    }
+
+    final authService = ref.read(authServiceProvider);
+    final authorized = await authService.authenticateForTransaction(
+      localizedReason: 'Authenticate to send this transaction',
+    );
+    if (!authorized) {
+      throw Exception('Biometric authentication failed');
     }
 
     final web3Service = ref.read(web3ServiceProvider);

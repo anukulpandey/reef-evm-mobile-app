@@ -17,7 +17,6 @@ import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
 import 'send_screen.dart';
-import 'wallet_connect_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -55,11 +54,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   context,
                   walletState.activeAccount?.address,
                   walletState.displayAccountName,
-                  onWalletConnectTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const WalletConnectScreen(),
-                    ),
-                  ),
                 ),
               ),
             ),

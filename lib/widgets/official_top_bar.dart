@@ -8,9 +8,8 @@ import '../l10n/app_localizations.dart';
 Widget topBar(
   BuildContext context,
   String? selectedAddress,
-  String? accountName, {
-  VoidCallback? onWalletConnectTap,
-}) {
+  String? accountName,
+) {
   final l10n = AppLocalizations.of(context);
   return Container(
     color: Colors.transparent,
@@ -33,14 +32,7 @@ Widget topBar(
             if (selectedAddress != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4, left: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _AccountPill(accountName ?? l10n.noName),
-                    const Gap(8.0),
-                    _buildWalletConnectButton(onWalletConnectTap),
-                  ],
-                ),
+                child: _AccountPill(accountName ?? l10n.noName),
               ),
           ],
         ),
@@ -79,26 +71,4 @@ class _AccountPill extends StatelessWidget {
       ),
     );
   }
-}
-
-Widget _buildWalletConnectButton(VoidCallback? onTap) {
-  return Material(
-    elevation: 4,
-    borderRadius: BorderRadius.circular(22.0),
-    child: InkWell(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: Styles.whiteColor,
-          borderRadius: BorderRadius.circular(22.0),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(6.0),
-          child: SvgPicture.asset('assets/images/walletconnect.svg', width: 20),
-        ),
-      ),
-    ),
-  );
 }

@@ -532,6 +532,12 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
     return TextField(
       controller: controller,
       obscureText: obscureText,
+      cursorColor: Styles.secondaryAccentColor,
+      style: const TextStyle(
+        color: Styles.textColor,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+      ),
       onChanged: (_) {
         setState(() {
           _detailsErrorText = null;
@@ -539,8 +545,17 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
       },
       decoration: InputDecoration(
         hintText: hintText,
+        hintStyle: const TextStyle(
+          color: Styles.textLightColor,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: Color(0xFFE1DFE7)),

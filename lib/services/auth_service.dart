@@ -36,6 +36,38 @@ class AuthService {
     }
   }
 
+  Future<bool> authenticateForTransaction({
+    String localizedReason = 'Authenticate to confirm this transaction',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool useBiometrics = prefs.getBool('use_biometrics') ?? false;
+
+    if (!useBiometrics) {
+      return true;
+    }
+
+    try {
+      final bool canAuthenticateWithBiometrics = await auth.canCheckBiometrics;
+      final bool canAuthenticate =
+          canAuthenticateWithBiometrics || await auth.isDeviceSupported();
+
+      if (!canAuthenticate) {
+        return false;
+      }
+
+      return await auth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false,
+        ),
+      );
+    } catch (e) {
+      print('Transaction auth error: $e');
+      return false;
+    }
+  }
+
   Future<void> setBiometricsEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use_biometrics', enabled);

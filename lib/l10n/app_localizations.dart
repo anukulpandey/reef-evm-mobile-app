@@ -45,7 +45,6 @@ class AppLocalizations {
   String get priceLabel => _get('priceLabel');
   String get send => _get('send');
   String get transferFailed => _get('transferFailed');
-  String get walletConnect => _get('walletConnect');
   String get goHomeOnSwitch => _get('goHomeOnSwitch');
   String get biometricAuth => _get('biometricAuth');
   String get changePassword => _get('changePassword');
@@ -64,7 +63,6 @@ class AppLocalizations {
   String get amount => _get('amount');
   String get transactionSubmitted => _get('transactionSubmitted');
   String get invalidAddressOrAmount => _get('invalidAddressOrAmount');
-  String get noWalletConnectYet => _get('noWalletConnectYet');
   String get scanQr => _get('scanQr');
   String get stopScan => _get('stopScan');
   String get scannedUri => _get('scannedUri');
@@ -83,6 +81,7 @@ class AppLocalizations {
   String get addressLabel => _get('addressLabel');
   String get selectAccount => _get('selectAccount');
   String get copyEvmAddress => _get('copyEvmAddress');
+  String get availableAccounts => _get('availableAccounts');
   String get accountSelected => _get('accountSelected');
   String get evmAddressCopied => _get('evmAddressCopied');
   String get deleteAccount => _get('deleteAccount');
@@ -157,7 +156,6 @@ _localizedValues = <String, Map<String, String>>{
     'priceLabel': 'Price: \$0.00',
     'send': 'SEND',
     'transferFailed': 'Transfer failed',
-    'walletConnect': 'WalletConnect',
     'goHomeOnSwitch': 'Go to Home on Account Switch',
     'biometricAuth': 'Biometric Authentication',
     'changePassword': 'Change Password',
@@ -176,7 +174,6 @@ _localizedValues = <String, Map<String, String>>{
     'amount': 'Amount',
     'transactionSubmitted': 'Transaction submitted',
     'invalidAddressOrAmount': 'Enter a valid address and amount',
-    'noWalletConnectYet': 'WalletConnect pairing is not configured yet.',
     'scanQr': 'Scan QR',
     'stopScan': 'Stop Scan',
     'scannedUri': 'Scanned URI',
@@ -195,6 +192,7 @@ _localizedValues = <String, Map<String, String>>{
     'addressLabel': 'Address',
     'selectAccount': 'Select Account',
     'copyEvmAddress': 'Copy EVM Address',
+    'availableAccounts': 'Available',
     'accountSelected': 'Account selected',
     'evmAddressCopied': 'EVM address copied',
     'deleteAccount': 'Delete account',
@@ -248,7 +246,6 @@ _localizedValues = <String, Map<String, String>>{
     'priceLabel': 'कीमत: \$0.00',
     'send': 'भेजें',
     'transferFailed': 'ट्रांसफर विफल',
-    'walletConnect': 'वॉलेट कनेक्ट',
     'goHomeOnSwitch': 'अकाउंट बदलने पर होम पर जाएं',
     'biometricAuth': 'बायोमेट्रिक प्रमाणीकरण',
     'changePassword': 'पासवर्ड बदलें',
@@ -267,7 +264,6 @@ _localizedValues = <String, Map<String, String>>{
     'amount': 'राशि',
     'transactionSubmitted': 'ट्रांजैक्शन भेजा गया',
     'invalidAddressOrAmount': 'सही पता और राशि दर्ज करें',
-    'noWalletConnectYet': 'WalletConnect pairing अभी कॉन्फ़िगर नहीं है।',
     'scanQr': 'QR स्कैन करें',
     'stopScan': 'स्कैन रोकें',
     'scannedUri': 'स्कैन किया गया URI',
@@ -286,6 +282,7 @@ _localizedValues = <String, Map<String, String>>{
     'addressLabel': 'पता',
     'selectAccount': 'अकाउंट चुनें',
     'copyEvmAddress': 'EVM पता कॉपी करें',
+    'availableAccounts': 'उपलब्ध',
     'accountSelected': 'अकाउंट चुना गया',
     'evmAddressCopied': 'EVM पता कॉपी हुआ',
     'deleteAccount': 'अकाउंट हटाएं',
@@ -339,7 +336,6 @@ _localizedValues = <String, Map<String, String>>{
     'priceLabel': 'Prezzo: \$0.00',
     'send': 'INVIA',
     'transferFailed': 'Trasferimento fallito',
-    'walletConnect': 'WalletConnect',
     'goHomeOnSwitch': 'Vai alla Home al cambio account',
     'biometricAuth': 'Autenticazione Biomentrica',
     'changePassword': 'Cambia Password',
@@ -358,8 +354,6 @@ _localizedValues = <String, Map<String, String>>{
     'amount': 'Importo',
     'transactionSubmitted': 'Transazione inviata',
     'invalidAddressOrAmount': 'Inserisci indirizzo e importo validi',
-    'noWalletConnectYet':
-        'L\'abbinamento WalletConnect non è ancora configurato.',
     'scanQr': 'Scansiona QR',
     'stopScan': 'Ferma Scansione',
     'scannedUri': 'URI Scansionato',
@@ -378,6 +372,7 @@ _localizedValues = <String, Map<String, String>>{
     'addressLabel': 'Indirizzo',
     'selectAccount': 'Seleziona Account',
     'copyEvmAddress': 'Copia Indirizzo EVM',
+    'availableAccounts': 'Disponibili',
     'accountSelected': 'Account selezionato',
     'evmAddressCopied': 'Indirizzo EVM copiato',
     'deleteAccount': 'Elimina account',

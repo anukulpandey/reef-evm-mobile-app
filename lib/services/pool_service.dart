@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../models/pool.dart';
+import '../models/pool_transaction.dart';
 import '../utils/token_icon_resolver.dart';
 
 class PoolService {
@@ -37,10 +38,14 @@ class PoolService {
       query Pools {
         pairs(first: 50, orderBy: reserveUSD, orderDirection: desc) {
           id
+          reserve0
+          reserve1
           reserveUSD
           volumeUSD
-          token0 { id symbol }
-          token1 { id symbol }
+          token0Price
+          token1Price
+          token0 { id symbol name decimals }
+          token1 { id symbol name decimals }
         }
       }
     ''';
@@ -86,6 +91,12 @@ class PoolService {
       final token1Id = token1['id'] as String?;
       final symbol0 = (token0['symbol'] as String?)?.trim();
       final symbol1 = (token1['symbol'] as String?)?.trim();
+      final reserve0 = _parseDouble(pair['reserve0']);
+      final reserve1 = _parseDouble(pair['reserve1']);
+      final token0Price = _parseDouble(pair['token0Price']);
+      final token1Price = _parseDouble(pair['token1Price']);
+      final token0Decimals = _parseInt(token0['decimals'], fallback: 18);
+      final token1Decimals = _parseInt(token1['decimals'], fallback: 18);
       final icon0 = token0Id == null
           ? null
           : explorerIcons[_normalizeAddress(token0Id)];
@@ -94,10 +105,23 @@ class PoolService {
           : explorerIcons[_normalizeAddress(token1Id)];
 
       return Pool(
+        id: (pair['id'] as String?)?.trim() ?? '',
         pairName:
             '${symbol0?.isNotEmpty == true ? symbol0 : 'Token0'} - ${symbol1?.isNotEmpty == true ? symbol1 : 'Token1'}',
+        token0Symbol: symbol0?.isNotEmpty == true ? symbol0! : 'Token0',
+        token1Symbol: symbol1?.isNotEmpty == true ? symbol1! : 'Token1',
+        token0Address: token0Id?.trim().toLowerCase() ?? '',
+        token1Address: token1Id?.trim().toLowerCase() ?? '',
+        token0Decimals: token0Decimals,
+        token1Decimals: token1Decimals,
         tvl: _formatCompactUsd(reserveUsd),
         volume24h: _formatCompactUsd(volumeUsd),
+        reserve0: reserve0,
+        reserve1: reserve1,
+        reserveUsd: reserveUsd,
+        volumeUsd: volumeUsd,
+        token0Price: token0Price,
+        token1Price: token1Price,
         percentChange: 0,
         tokenIcons: <String>[
           TokenIconResolver.resolveTokenIconUrl(
@@ -113,6 +137,75 @@ class PoolService {
         ],
       );
     }).toList();
+  }
+
+  Future<List<PoolTransactionEvent>> getPairTransactions(
+    String pairId, {
+    int first = 250,
+  }) async {
+    final normalizedPairId = pairId.trim().toLowerCase();
+    if (normalizedPairId.isEmpty) return const <PoolTransactionEvent>[];
+
+    const query = r'''
+      query PairTransactions($pairId: String!, $first: Int!) {
+        swaps(first: $first, where: { pair: $pairId }, orderBy: timestamp, orderDirection: asc) {
+          id
+          timestamp
+          amount0In
+          amount1In
+          amount0Out
+          amount1Out
+          amountUSD
+          transaction { id }
+        }
+        mints(first: $first, where: { pair: $pairId }, orderBy: timestamp, orderDirection: asc) {
+          id
+          timestamp
+          amount0
+          amount1
+          amountUSD
+          transaction { id }
+        }
+        burns(first: $first, where: { pair: $pairId }, orderBy: timestamp, orderDirection: asc) {
+          id
+          timestamp
+          amount0
+          amount1
+          amountUSD
+          transaction { id }
+        }
+      }
+    ''';
+
+    final response = await _postWithEndpointFallback(
+      query,
+      variables: <String, dynamic>{'pairId': normalizedPairId, 'first': first},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return const <PoolTransactionEvent>[];
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) return const <PoolTransactionEvent>[];
+    final errors = decoded['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      return const <PoolTransactionEvent>[];
+    }
+    final data = decoded['data'];
+    if (data is! Map<String, dynamic>) return const <PoolTransactionEvent>[];
+
+    final swaps = _parseSwapEvents(data['swaps']);
+    final mints = _parseMintBurnEvents(
+      data['mints'],
+      type: PoolTransactionType.mint,
+    );
+    final burns = _parseMintBurnEvents(
+      data['burns'],
+      type: PoolTransactionType.burn,
+    );
+    final all = <PoolTransactionEvent>[...swaps, ...mints, ...burns]
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return all;
   }
 
   Future<double> getReefUsdPrice() async {
@@ -323,7 +416,10 @@ class PoolService {
     return null;
   }
 
-  Future<http.Response> _postWithEndpointFallback(String query) async {
+  Future<http.Response> _postWithEndpointFallback(
+    String query, {
+    Map<String, dynamic>? variables,
+  }) async {
     final endpoints = <String>{
       _graphQlEndpoint,
       if (_graphQlEndpoint.endsWith('/graphql'))
@@ -339,7 +435,10 @@ class PoolService {
           .post(
             Uri.parse(endpoint),
             headers: const {'content-type': 'application/json'},
-            body: jsonEncode(<String, dynamic>{'query': query}),
+            body: jsonEncode(<String, dynamic>{
+              'query': query,
+              if (variables != null) 'variables': variables,
+            }),
           )
           .timeout(const Duration(seconds: 15));
       lastResponse = response;
@@ -360,6 +459,13 @@ class PoolService {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value) ?? 0;
     return 0;
+  }
+
+  static int _parseInt(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
   }
 
   static String _formatCompactUsd(double amount) {
@@ -392,6 +498,47 @@ class PoolService {
         weight: normalizedWeight,
       );
     }
+  }
+
+  static List<PoolTransactionEvent> _parseSwapEvents(dynamic source) {
+    if (source is! List) return const <PoolTransactionEvent>[];
+    return source.whereType<Map<String, dynamic>>().map((item) {
+      final amount0In = _parseDouble(item['amount0In']);
+      final amount1In = _parseDouble(item['amount1In']);
+      final amount0Out = _parseDouble(item['amount0Out']);
+      final amount1Out = _parseDouble(item['amount1Out']);
+      final token0Amount = amount0In > 0 ? amount0In : amount0Out;
+      final token1Amount = amount1In > 0 ? amount1In : amount1Out;
+      final tx = item['transaction'] as Map<String, dynamic>? ?? const {};
+      return PoolTransactionEvent(
+        id: (item['id'] ?? '').toString(),
+        type: PoolTransactionType.swap,
+        timestamp: _parseInt(item['timestamp']),
+        token0Amount: token0Amount,
+        token1Amount: token1Amount,
+        usdAmount: _parseDouble(item['amountUSD']),
+        transactionHash: (tx['id'] ?? '').toString(),
+      );
+    }).toList();
+  }
+
+  static List<PoolTransactionEvent> _parseMintBurnEvents(
+    dynamic source, {
+    required PoolTransactionType type,
+  }) {
+    if (source is! List) return const <PoolTransactionEvent>[];
+    return source.whereType<Map<String, dynamic>>().map((item) {
+      final tx = item['transaction'] as Map<String, dynamic>? ?? const {};
+      return PoolTransactionEvent(
+        id: (item['id'] ?? '').toString(),
+        type: type,
+        timestamp: _parseInt(item['timestamp']),
+        token0Amount: _parseDouble(item['amount0']),
+        token1Amount: _parseDouble(item['amount1']),
+        usdAmount: _parseDouble(item['amountUSD']),
+        transactionHash: (tx['id'] ?? '').toString(),
+      );
+    }).toList();
   }
 }
 

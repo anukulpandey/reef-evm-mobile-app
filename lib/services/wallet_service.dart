@@ -78,4 +78,8 @@ class WalletService {
   Future<String?> getLastActiveAccount() async {
     return _storageService.getLastActiveAccount();
   }
+
+  Future<void> clearAccount(String address) async {
+    await _storageService.clearAccount(address);
+  }
 }

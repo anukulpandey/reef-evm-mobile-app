@@ -11,7 +11,7 @@ import '../providers/wallet_provider.dart';
 import '../core/theme/styles.dart';
 import '../utils/token_icon_resolver.dart';
 import '../widgets/official_top_bar.dart';
-import 'wallet_connect_screen.dart';
+import 'pool_detail_screen.dart';
 
 class PoolsScreen extends ConsumerWidget {
   const PoolsScreen({super.key});
@@ -41,11 +41,6 @@ class PoolsScreen extends ConsumerWidget {
                 context,
                 walletState.activeAccount?.address,
                 walletState.displayAccountName,
-                onWalletConnectTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const WalletConnectScreen(),
-                  ),
-                ),
               ),
             ),
           ),
@@ -82,156 +77,159 @@ class PoolsScreen extends ConsumerWidget {
                   itemCount: pools.length,
                   itemBuilder: (context, index) {
                     final pool = pools[index];
-                    final pairParts = pool.pairName
-                        .split('-')
-                        .map((e) => e.trim())
-                        .toList();
-                    final token0Symbol = pairParts.isNotEmpty
-                        ? _displaySymbol(pairParts.first)
-                        : 'T0';
-                    final token1Symbol = pairParts.length > 1
-                        ? _displaySymbol(pairParts.last)
-                        : 'T1';
+                    final token0Symbol = _displaySymbol(pool.token0Symbol);
+                    final token1Symbol = _displaySymbol(pool.token1Symbol);
                     final ticker =
                         '${_tickerSymbol(token0Symbol)}/${_tickerSymbol(token1Symbol)}';
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECEAF1),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PoolDetailScreen(pool: pool),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECEAF1),
+                            borderRadius: BorderRadius.circular(18),
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 64,
-                                height: 52,
-                                child: Stack(
-                                  children: [
-                                    Positioned(
-                                      left: 0,
-                                      top: 8,
-                                      child: _buildTokenAvatar(
-                                        iconUrl: pool.tokenIcons.isNotEmpty
-                                            ? pool.tokenIcons[0]
-                                            : null,
-                                        fallbackSeed: token0Symbol,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 64,
+                                  height: 52,
+                                  child: Stack(
+                                    children: [
+                                      Positioned(
+                                        left: 0,
+                                        top: 8,
+                                        child: _buildTokenAvatar(
+                                          iconUrl: pool.tokenIcons.isNotEmpty
+                                              ? pool.tokenIcons[0]
+                                              : null,
+                                          fallbackSeed: token0Symbol,
+                                        ),
                                       ),
-                                    ),
-                                    Positioned(
-                                      left: 20,
-                                      top: 8,
-                                      child: _buildTokenAvatar(
-                                        iconUrl: pool.tokenIcons.length > 1
-                                            ? pool.tokenIcons[1]
-                                            : null,
-                                        fallbackSeed: token1Symbol,
+                                      Positioned(
+                                        left: 20,
+                                        top: 8,
+                                        child: _buildTokenAvatar(
+                                          iconUrl: pool.tokenIcons.length > 1
+                                              ? pool.tokenIcons[1]
+                                              : null,
+                                          fallbackSeed: token1Symbol,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const Gap(8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '$token0Symbol - $token1Symbol',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: Styles.fsCardTitle,
-                                        color: Color(0xFF1F1C2A),
+                                const Gap(8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '$token0Symbol - $token1Symbol',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: Styles.fsCardTitle,
+                                          color: Color(0xFF1F1C2A),
+                                        ),
                                       ),
-                                    ),
-                                    const Gap(2),
-                                    Text.rich(
-                                      TextSpan(
-                                        children: [
-                                          TextSpan(
-                                            text: '${l10n.tvlLabel} : ',
-                                            style: TextStyle(
-                                              color: Color(0xFF353142),
-                                              fontSize: Styles.fsBody,
-                                              fontWeight: FontWeight.w800,
+                                      const Gap(2),
+                                      Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: '${l10n.tvlLabel} : ',
+                                              style: TextStyle(
+                                                color: Color(0xFF353142),
+                                                fontSize: Styles.fsBody,
+                                                fontWeight: FontWeight.w800,
+                                              ),
                                             ),
-                                          ),
-                                          TextSpan(
-                                            text: pool.tvl,
-                                            style: const TextStyle(
-                                              color: Color(0xFF353142),
-                                              fontSize: Styles.fsBody,
-                                              fontWeight: FontWeight.w700,
+                                            TextSpan(
+                                              text: pool.tvl,
+                                              style: const TextStyle(
+                                                color: Color(0xFF353142),
+                                                fontSize: Styles.fsBody,
+                                                fontWeight: FontWeight.w700,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const Gap(1),
-                                    Text.rich(
-                                      TextSpan(
-                                        children: [
-                                          TextSpan(
-                                            text: '${l10n.volume24hLabel} : ',
-                                            style: TextStyle(
-                                              color: Color(0xFF353142),
-                                              fontSize: Styles.fsBody,
-                                              fontWeight: FontWeight.w800,
+                                      const Gap(1),
+                                      Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: '${l10n.volume24hLabel} : ',
+                                              style: TextStyle(
+                                                color: Color(0xFF353142),
+                                                fontSize: Styles.fsBody,
+                                                fontWeight: FontWeight.w800,
+                                              ),
                                             ),
-                                          ),
-                                          TextSpan(
-                                            text: pool.volume24h,
-                                            style: const TextStyle(
-                                              color: Color(0xFF353142),
-                                              fontSize: Styles.fsBody,
-                                              fontWeight: FontWeight.w700,
+                                            TextSpan(
+                                              text: pool.volume24h,
+                                              style: const TextStyle(
+                                                color: Color(0xFF353142),
+                                                fontSize: Styles.fsBody,
+                                                fontWeight: FontWeight.w700,
+                                              ),
                                             ),
-                                          ),
-                                          const TextSpan(
-                                            text: ' 0 %',
-                                            style: TextStyle(
-                                              color: Color(0xFF26B686),
-                                              fontSize: Styles.fsBody,
-                                              fontWeight: FontWeight.w800,
+                                            const TextSpan(
+                                              text: ' 0 %',
+                                              style: TextStyle(
+                                                color: Color(0xFF26B686),
+                                                fontSize: Styles.fsBody,
+                                                fontWeight: FontWeight.w800,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      ticker,
-                                      style: const TextStyle(
-                                        color: Color(0xFF413D4C),
-                                        fontSize: Styles.fsBody,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.8,
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        ticker,
+                                        style: const TextStyle(
+                                          color: Color(0xFF413D4C),
+                                          fontSize: Styles.fsBody,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.8,
+                                        ),
                                       ),
-                                    ),
-                                    const Gap(4),
-                                    const Icon(
-                                      Icons.help_outline_rounded,
-                                      color: Color(0xFF9C98A9),
-                                      size: 23,
-                                    ),
-                                  ],
+                                      const Gap(4),
+                                      const Icon(
+                                        Icons.chevron_right_rounded,
+                                        color: Color(0xFF9C98A9),
+                                        size: 23,
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
