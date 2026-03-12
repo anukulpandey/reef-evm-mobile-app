@@ -12,7 +12,7 @@ class AddAccountModal extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
-        color: Styles.primaryBackgroundColor,
+        color: Styles.whiteColor,
         borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
       ),
       child: Column(
@@ -71,7 +71,8 @@ class AddAccountModal extends ConsumerWidget {
             style: const TextStyle(color: Styles.textColor),
             decoration: const InputDecoration(
               hintText: "Enter mnemonic phrase...",
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Styles.purpleColor)),
+              border: OutlineInputBorder(),
+              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Styles.purpleColor)),
             ),
           ),
           actions: [

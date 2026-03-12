@@ -38,12 +38,9 @@ class WalletScreen extends ConsumerWidget {
             ),
           ),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: walletState.activeAccount == null
-                  ? _buildNoAccountState(context)
-                  : _buildAccountList(context, ref, walletState),
-            ),
+            child: walletState.activeAccount == null
+                ? _buildNoAccountState(context)
+                : _buildAccountList(context, ref, walletState),
           ),
         ],
       ),
@@ -61,21 +58,28 @@ class WalletScreen extends ConsumerWidget {
             style: TextStyle(color: Styles.textLightColor, fontSize: 16),
           ),
           const Gap(20),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Styles.secondaryAccentColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(40),
+              gradient: Styles.buttonGradient,
             ),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
-                builder: (context) => const AddAccountModal(),
-              );
-            },
-            child: const Text("Add Account", style: TextStyle(color: Colors.white)),
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const AddAccountModal(),
+                );
+              },
+              child: const Text("Add Account", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
           ),
         ],
       ),
@@ -84,14 +88,31 @@ class WalletScreen extends ConsumerWidget {
 
   Widget _buildAccountList(BuildContext context, WidgetRef ref, WalletState state) {
     return ListView(
+      padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          "My Accounts",
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Styles.primaryColor,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              "My Accounts",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Styles.primaryColor,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_circle, color: Styles.purpleColor, size: 28),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const AddAccountModal(),
+                );
+              },
+            ),
+          ],
         ),
         const Gap(16),
         AccountBox(
@@ -102,15 +123,18 @@ class WalletScreen extends ConsumerWidget {
           onSelected: () {},
         ),
         const Gap(24),
-        OutlinedButton(
+        OutlinedButton.icon(
+          icon: const Icon(Icons.logout, size: 18),
           style: OutlinedButton.styleFrom(
+            foregroundColor: Styles.purpleColor,
             side: const BorderSide(color: Styles.purpleColor),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(vertical: 12),
           ),
           onPressed: () {
             ref.read(walletProvider.notifier).logout();
           },
-          child: const Text("Logout / Clear Storage", style: TextStyle(color: Styles.purpleColor)),
+          label: const Text("Logout / Clear Storage", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );

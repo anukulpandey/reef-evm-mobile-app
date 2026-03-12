@@ -28,56 +28,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       body: Container(
         color: Styles.primaryBackgroundColor,
-        child: Stack(
+        child: Column(
           children: [
-            Column(
-              children: [
-                Material(
-                  elevation: 3,
-                  shadowColor: Colors.black45,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: const BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage("assets/images/reef-header.png"),
-                        fit: BoxFit.cover,
-                        alignment: Alignment(-0.82, 1.0),
-                      ),
-                    ),
-                    child: topBar(
-                      context,
-                      walletState.activeAccount?.address,
-                      'Account 1', // Placeholder name
-                    ),
+            Material(
+              elevation: 3,
+              shadowColor: Colors.black45,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage("assets/images/reef-header.png"),
+                    fit: BoxFit.cover,
+                    alignment: Alignment(-0.82, 1.0),
                   ),
                 ),
-                Expanded(
-                  child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    slivers: [
-                      SliverPersistentHeader(
-                        delegate: _BalanceHeaderDelegate(
-                          balance: walletState.balance,
-                          showBalance: walletState.showBalance,
-                          onToggleVisibility: () => ref.read(walletProvider.notifier).toggleBalanceVisibility(),
-                        ),
-                      ),
-                      SliverPinnedHeader(
-                        child: _buildNavSection(),
-                      ),
-                      if (walletState.activeAccount == null)
-                        SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-                          sliver: SliverToBoxAdapter(
-                            child: _buildNoAccountState(context),
-                          ),
-                        )
-                      else
-                        _buildMainContent(walletState),
-                    ],
-                  ),
+                child: topBar(
+                  context,
+                  walletState.activeAccount?.address,
+                  'Account 1',
                 ),
-              ],
+              ),
+            ),
+            Expanded(
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverPersistentHeader(
+                    delegate: _BalanceHeaderDelegate(
+                      balance: walletState.balance,
+                      showBalance: walletState.showBalance,
+                      onToggleVisibility: () => ref.read(walletProvider.notifier).toggleBalanceVisibility(),
+                    ),
+                  ),
+                  SliverPinnedHeader(
+                    child: _buildNavSection(),
+                  ),
+                  if (walletState.activeAccount == null)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+                      sliver: SliverToBoxAdapter(
+                        child: _buildNoAccountState(context),
+                      ),
+                    )
+                  else
+                    _buildMainContent(walletState),
+                ],
+              ),
             ),
           ],
         ),
@@ -123,7 +119,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildNavItem(int index, String label) {
     bool isSelected = _currentIndex == index;
     return InkWell(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _currentIndex = index);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
@@ -157,21 +156,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           style: TextStyle(color: Styles.textLightColor, fontSize: 14),
         ),
         const Gap(24),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Styles.secondaryAccentColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(80),
+            gradient: Styles.buttonGradient,
+            boxShadow: [
+              BoxShadow(
+                color: Styles.secondaryAccentColorDark.withOpacity(0.3),
+                spreadRadius: 2,
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
-              builder: (context) => const AddAccountModal(),
-            );
-          },
-          child: const Text('Add Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+            ),
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const AddAccountModal(),
+              );
+            },
+            child: const Text('Add Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
         ),
       ],
     );
@@ -215,22 +229,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 const CircleAvatar(
                   radius: 24,
-                  backgroundColor: Colors.purple,
-                  child: Icon(Icons.waves, color: Colors.white),
+                  backgroundColor: Colors.white,
+                  child: Image(image: AssetImage("assets/images/reef.png"), width: 32, height: 32),
                 ),
                 const Gap(15),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(name, style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w700)),
-                    const Text("Price: $0.00", style: TextStyle(color: Styles.textLightColor, fontSize: 14)),
+                    const Text("Price: \$0.00", style: TextStyle(color: Styles.textLightColor, fontSize: 14)),
                   ],
                 ),
                 const Spacer(),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('\$$balance', style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w900)),
+                    GradientText(
+                      '\$$balance',
+                      gradient: textGradient(),
+                      style: GoogleFonts.poppins(color: Styles.textColor, fontSize: 18, fontWeight: FontWeight.w900),
+                    ),
                     Text('$balance $symbol', style: const TextStyle(color: Styles.textColor, fontWeight: FontWeight.w600)),
                   ],
                 ),
@@ -248,7 +266,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.send, color: Colors.white, size: 16),
                       label: const Text("SEND", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: const StadiumBorder(),
+                      ),
                       onPressed: () {},
                     ),
                   ),
@@ -271,9 +293,14 @@ class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    double opacity = ((shrinkOffset - 180) / 180).abs();
+    if (opacity < 0) opacity = 0;
+    if (opacity > 1) opacity = 1;
+
     return Opacity(
-      opacity: ((shrinkOffset - 200) / 200).abs(),
-      child: Center(
+      opacity: opacity,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -287,13 +314,16 @@ class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                 ),
               ],
             ),
-            Text(
-              showBalance ? '\$$balance' : '******',
-              style: GoogleFonts.poppins(
-                fontSize: 48,
-                fontWeight: FontWeight.w800,
-                color: Styles.textColor,
-                letterSpacing: 2,
+            Center(
+              child: GradientText(
+                showBalance ? '\$$balance' : '******',
+                gradient: textGradient(),
+                style: GoogleFonts.poppins(
+                  fontSize: 48,
+                  fontWeight: FontWeight.w800,
+                  color: Styles.textColor,
+                  letterSpacing: 2,
+                ),
               ),
             ),
           ],
