@@ -28,7 +28,7 @@ class ViewBoxContainer extends StatelessWidget {
             color: Color(0x12000000),
             offset: Offset(0, 3),
             blurRadius: 30,
-          )
+          ),
         ],
         borderRadius: BorderRadius.circular(15),
       ),
@@ -60,12 +60,7 @@ class GradientText extends StatelessWidget {
       shaderCallback: (bounds) => gradient.createShader(
         Rect.fromLTWH(0, 0, bounds.width, bounds.height),
       ),
-      child: Text(
-        text,
-        style: style,
-        textAlign: textAlign,
-        overflow: overflow,
-      ),
+      child: Text(text, style: style, textAlign: textAlign, overflow: overflow),
     );
   }
 }
@@ -74,9 +69,6 @@ LinearGradient textGradient() {
   return const LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Styles.purpleColor,
-      Styles.primaryAccentColor,
-    ],
+    colors: [Styles.purpleColor, Styles.primaryAccentColor],
   );
 }

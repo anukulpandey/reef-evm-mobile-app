@@ -1,12 +1,11 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../constants/storage_keys.dart';
 
 class SecureStorageService {
   final _storage = const FlutterSecureStorage();
   static const _keyPrefix = 'wallet_';
-  static const _accountNamesKey = 'account_names_v1';
-  static const _lastActiveAccountKey = 'last_active_account_v1';
 
   Future<void> saveAccount(
     String address,
@@ -27,13 +26,17 @@ class SecureStorageService {
 
     // Save to shared prefs so we know which accounts exist without decrypting
     final prefs = await SharedPreferences.getInstance();
-    final accounts = prefs.getStringList('accounts') ?? <String>[];
+    final accounts =
+        prefs.getStringList(StorageKeys.accountsIndex) ?? <String>[];
     final exists = accounts.any(
       (existing) => existing.trim().toLowerCase() == normalizedAddress,
     );
     if (!exists) {
       accounts.add(normalizedAddress);
-      await prefs.setStringList('accounts', accounts.toSet().toList());
+      await prefs.setStringList(
+        StorageKeys.accountsIndex,
+        accounts.toSet().toList(),
+      );
     }
   }
 
@@ -77,7 +80,8 @@ class SecureStorageService {
 
   Future<List<String>> getAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    final fromPrefs = prefs.getStringList('accounts') ?? <String>[];
+    final fromPrefs =
+        prefs.getStringList(StorageKeys.accountsIndex) ?? <String>[];
 
     // Recover any legacy accounts that may exist in secure storage but are
     // missing from SharedPreferences index.
@@ -101,7 +105,7 @@ class SecureStorageService {
 
     if (merged.length != fromPrefs.length ||
         !fromPrefs.every((value) => merged.contains(value))) {
-      await prefs.setStringList('accounts', merged);
+      await prefs.setStringList(StorageKeys.accountsIndex, merged);
     }
 
     return merged;
@@ -111,17 +115,17 @@ class SecureStorageService {
     final normalized = address.trim().toLowerCase();
     if (normalized.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_accountNamesKey);
+    final raw = prefs.getString(StorageKeys.accountNames);
     final decoded = _decodeStringMap(raw);
     decoded[normalized] = name.trim();
-    await prefs.setString(_accountNamesKey, jsonEncode(decoded));
+    await prefs.setString(StorageKeys.accountNames, jsonEncode(decoded));
   }
 
   Future<String?> getAccountName(String address) async {
     final normalized = address.trim().toLowerCase();
     if (normalized.isEmpty) return null;
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_accountNamesKey);
+    final raw = prefs.getString(StorageKeys.accountNames);
     final decoded = _decodeStringMap(raw);
     final value = decoded[normalized]?.trim();
     if (value == null || value.isEmpty) return null;
@@ -132,12 +136,12 @@ class SecureStorageService {
     final normalized = address.trim();
     if (normalized.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastActiveAccountKey, normalized);
+    await prefs.setString(StorageKeys.lastActiveAccount, normalized);
   }
 
   Future<String?> getLastActiveAccount() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_lastActiveAccountKey)?.trim();
+    final value = prefs.getString(StorageKeys.lastActiveAccount)?.trim();
     if (value == null || value.isEmpty) return null;
     return value;
   }
@@ -161,23 +165,24 @@ class SecureStorageService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final accounts = prefs.getStringList('accounts') ?? <String>[];
+    final accounts =
+        prefs.getStringList(StorageKeys.accountsIndex) ?? <String>[];
     final filtered = accounts
         .where((value) => value.trim().toLowerCase() != normalizedAddress)
         .toList();
-    await prefs.setStringList('accounts', filtered);
+    await prefs.setStringList(StorageKeys.accountsIndex, filtered);
 
-    final raw = prefs.getString(_accountNamesKey);
+    final raw = prefs.getString(StorageKeys.accountNames);
     final decoded = _decodeStringMap(raw);
     decoded.remove(normalizedAddress);
-    await prefs.setString(_accountNamesKey, jsonEncode(decoded));
+    await prefs.setString(StorageKeys.accountNames, jsonEncode(decoded));
 
     final lastActive = prefs
-        .getString(_lastActiveAccountKey)
+        .getString(StorageKeys.lastActiveAccount)
         ?.trim()
         .toLowerCase();
     if (lastActive == normalizedAddress) {
-      await prefs.remove(_lastActiveAccountKey);
+      await prefs.remove(StorageKeys.lastActiveAccount);
     }
   }
 

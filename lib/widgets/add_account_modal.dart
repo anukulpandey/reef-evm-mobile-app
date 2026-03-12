@@ -7,6 +7,9 @@ import '../core/theme/styles.dart';
 import '../l10n/app_localizations.dart';
 import '../models/account.dart';
 import '../providers/wallet_provider.dart';
+import '../utils/address_utils.dart';
+import 'common/address_pattern_avatar.dart';
+import 'common/square_checkbox.dart';
 
 enum _ModalView { options, created, details }
 
@@ -106,59 +109,11 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
           const Gap(6),
           _buildHeader(title: l10n.createNew),
           const Gap(14),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Styles.whiteColor,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Row(
-              children: [
-                _buildAddressAvatar(account.address),
-                const Gap(14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.noName,
-                        style: TextStyle(
-                          color: Styles.textColor,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Gap(4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${l10n.addressLabel}: ${_shortAddress(account.address)}',
-                              style: const TextStyle(
-                                color: Color(0xFF6E6E75),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.copy_rounded,
-                              color: Color(0xFF7C7B83),
-                            ),
-                            onPressed: () => _copyText(
-                              context,
-                              account.address,
-                              l10n.addressCopied,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          _buildAccountPreviewCard(
+            context: context,
+            l10n: l10n,
+            account: account,
+            displayName: l10n.noName,
           ),
           const Gap(18),
           Text(
@@ -237,11 +192,14 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Checkbox(
+                SquareCheckbox(
                   value: _hasSavedPhrase,
-                  activeColor: Styles.primaryAccentColorDark,
-                  onChanged: (_) =>
-                      setState(() => _hasSavedPhrase = !_hasSavedPhrase),
+                  onChanged: (value) => setState(() => _hasSavedPhrase = value),
+                  size: 24,
+                  fillColor: Colors.white,
+                  borderColor: const Color(0xFFC7C2D7),
+                  checkColor: Styles.primaryAccentColorDark,
+                  borderWidth: 1.6,
                 ),
                 Expanded(
                   child: Padding(
@@ -328,59 +286,11 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
           const Gap(6),
           _buildHeader(title: l10n.createNew),
           const Gap(14),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Styles.whiteColor,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Row(
-              children: [
-                _buildAddressAvatar(account.address),
-                const Gap(14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        enteredName.isEmpty ? l10n.noName : enteredName,
-                        style: const TextStyle(
-                          color: Styles.textColor,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Gap(4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${l10n.addressLabel}: ${_shortAddress(account.address)}',
-                              style: const TextStyle(
-                                color: Color(0xFF6E6E75),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.copy_rounded,
-                              color: Color(0xFF7C7B83),
-                            ),
-                            onPressed: () => _copyText(
-                              context,
-                              account.address,
-                              l10n.addressCopied,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          _buildAccountPreviewCard(
+            context: context,
+            l10n: l10n,
+            account: account,
+            displayName: enteredName.isEmpty ? l10n.noName : enteredName,
           ),
           const Gap(16),
           Text(
@@ -399,11 +309,15 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
             onTap: () => setState(() => _biometricEnabled = !_biometricEnabled),
             child: Row(
               children: [
-                Checkbox(
+                SquareCheckbox(
                   value: _biometricEnabled,
-                  onChanged: (_) =>
-                      setState(() => _biometricEnabled = !_biometricEnabled),
-                  activeColor: Styles.primaryAccentColorDark,
+                  onChanged: (value) =>
+                      setState(() => _biometricEnabled = value),
+                  size: 24,
+                  fillColor: Colors.white,
+                  borderColor: const Color(0xFFC7C2D7),
+                  checkColor: Styles.primaryAccentColorDark,
+                  borderWidth: 1.6,
                 ),
                 Text(
                   l10n.enableBiometricAuthentication,
@@ -524,6 +438,74 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
     );
   }
 
+  Widget _buildAccountPreviewCard({
+    required BuildContext context,
+    required AppLocalizations l10n,
+    required Account account,
+    required String displayName,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Styles.whiteColor,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          AddressPatternAvatar(
+            seed: account.address,
+            size: 92,
+            innerSize: 70,
+            dotSize: 12,
+            dotCount: 25,
+          ),
+          const Gap(14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    color: Styles.textColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+                const Gap(4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${l10n.addressLabel}: ${AddressUtils.shorten(account.address, prefixLength: 4, suffixLength: 3)}',
+                        style: const TextStyle(
+                          color: Color(0xFF6E6E75),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.copy_rounded,
+                        color: Color(0xFF7C7B83),
+                      ),
+                      onPressed: () => _copyText(
+                        context,
+                        account.address,
+                        l10n.addressCopied,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInputField({
     required TextEditingController controller,
     required String hintText,
@@ -623,47 +605,6 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
     );
   }
 
-  Widget _buildAddressAvatar(String seed) {
-    final colors = <Color>[
-      const Color(0xFF2D8CFF),
-      const Color(0xFF6CCB2F),
-      const Color(0xFFD873C0),
-      const Color(0xFF8D7BFF),
-      const Color(0xFF6EC6DE),
-      const Color(0xFFE58DA0),
-    ];
-    final bytes = seed.codeUnits;
-    return Container(
-      width: 92,
-      height: 92,
-      decoration: const BoxDecoration(
-        color: Color(0xFFEFF0F2),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: SizedBox(
-          width: 70,
-          height: 70,
-          child: Wrap(
-            spacing: 2,
-            runSpacing: 2,
-            children: List.generate(25, (index) {
-              final v = bytes[(index * 7) % bytes.length];
-              return Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: colors[v % colors.length],
-                  shape: BoxShape.circle,
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _handleCreateNew() async {
     setState(() {
       _isCreating = true;
@@ -757,10 +698,5 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
       _view = _ModalView.details;
       _detailsErrorText = null;
     });
-  }
-
-  String _shortAddress(String address) {
-    if (address.length < 10) return address;
-    return '${address.substring(0, 4)}...${address.substring(address.length - 3)}';
   }
 }

@@ -1,5 +1,7 @@
 import '../models/token.dart';
 import '../utils/token_icon_resolver.dart';
+import '../utils/amount_utils.dart';
+import '../utils/address_validator.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -52,9 +54,9 @@ class ExplorerService {
       final payload = _tryDecodeJson(response.body);
       if (payload is! Map<String, dynamic>) return null;
 
-      final raw = _parsePositiveBigInt(payload['coin_balance']);
+      final raw = AmountUtils.parsePositiveBigInt(payload['coin_balance']);
       if (raw <= BigInt.zero) return '0';
-      return _formatTokenAmount(raw, 18);
+      return AmountUtils.formatAmountFromRaw(raw, 18);
     } catch (_) {
       return null;
     }
@@ -191,7 +193,7 @@ class ExplorerService {
       final tokenType = (token['type'] ?? 'ERC-20').toString().toUpperCase();
       if (!tokenType.contains('ERC-20')) continue;
 
-      final rawBalance = _parsePositiveBigInt(item['value']);
+      final rawBalance = AmountUtils.parsePositiveBigInt(item['value']);
       if (rawBalance <= BigInt.zero) continue;
 
       final address = (token['address_hash'] ?? token['address'] ?? '')
@@ -215,7 +217,7 @@ class ExplorerService {
           symbol: symbol,
           name: name,
           decimals: decimals,
-          balance: _formatTokenAmount(rawBalance, decimals),
+          balance: AmountUtils.formatAmountFromRaw(rawBalance, decimals),
           address: normalizedAddress,
           iconUrl: TokenIconResolver.resolveTokenIconUrl(
             address: normalizedAddress,
@@ -241,7 +243,7 @@ class ExplorerService {
     for (final item in result) {
       if (item is! Map<String, dynamic>) continue;
 
-      final rawBalance = _parsePositiveBigInt(item['balance']);
+      final rawBalance = AmountUtils.parsePositiveBigInt(item['balance']);
       if (rawBalance <= BigInt.zero) continue;
 
       final address = (item['contractAddress'] ?? '').toString().trim();
@@ -263,7 +265,7 @@ class ExplorerService {
           symbol: symbol,
           name: name,
           decimals: decimals,
-          balance: _formatTokenAmount(rawBalance, decimals),
+          balance: AmountUtils.formatAmountFromRaw(rawBalance, decimals),
           address: normalizedAddress,
           iconUrl: TokenIconResolver.resolveTokenIconUrl(
             address: normalizedAddress,
@@ -327,44 +329,10 @@ class ExplorerService {
     }
   }
 
-  static BigInt _parsePositiveBigInt(dynamic value) {
-    if (value == null) return BigInt.zero;
-    final text = value.toString().trim();
-    if (text.isEmpty) return BigInt.zero;
-    BigInt parsed;
-    if (text.startsWith('0x') || text.startsWith('0X')) {
-      parsed = BigInt.tryParse(text.substring(2), radix: 16) ?? BigInt.zero;
-    } else {
-      final intPart = text.split('.').first;
-      parsed = BigInt.tryParse(intPart) ?? BigInt.zero;
-    }
-    if (parsed < BigInt.zero) return BigInt.zero;
-    return parsed;
-  }
-
   static int _parseDecimals(dynamic value) {
     final parsed = int.tryParse(value?.toString() ?? '');
     if (parsed == null || parsed < 0 || parsed > 255) return 18;
     return parsed;
-  }
-
-  static String _formatTokenAmount(BigInt raw, int decimals) {
-    if (raw == BigInt.zero) return '0';
-    if (decimals <= 0) return raw.toString();
-
-    final divisor = BigInt.from(10).pow(decimals);
-    final whole = raw ~/ divisor;
-    final fractionRaw = raw
-        .remainder(divisor)
-        .toString()
-        .padLeft(decimals, '0');
-
-    final precision = decimals > 6 ? 6 : decimals;
-    var fraction = fractionRaw.substring(0, precision);
-    fraction = fraction.replaceFirst(RegExp(r'0+$'), '');
-
-    if (fraction.isEmpty) return whole.toString();
-    return '$whole.$fraction';
   }
 
   static String _normalizeAddress(String value) {
@@ -372,8 +340,7 @@ class ExplorerService {
   }
 
   static bool _isHexAddress(String value) {
-    final normalized = value.trim();
-    return RegExp(r'^0x[a-fA-F0-9]{40}$').hasMatch(normalized);
+    return AddressValidator.isValidEvmAddress(value);
   }
 }
 

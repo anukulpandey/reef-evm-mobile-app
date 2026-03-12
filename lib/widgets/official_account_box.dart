@@ -2,8 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/theme/styles.dart';
+import 'blurable_content.dart';
+import '../utils/address_utils.dart';
+import 'common/address_pattern_avatar.dart';
 
-enum AccountMenuAction { selectAccount, copyEvmAddress, delete, exportAccount }
+enum AccountMenuAction {
+  selectAccount,
+  copyEvmAddress,
+  renameAccount,
+  delete,
+  exportAccount,
+}
 
 class AccountBox extends StatelessWidget {
   final String address;
@@ -13,10 +22,12 @@ class AccountBox extends StatelessWidget {
   final VoidCallback onSelected;
   final ValueChanged<AccountMenuAction>? onMenuAction;
   final bool lightTheme;
+  final bool showBalance;
   final String selectedText;
   final String addressPrefix;
   final String selectAccountText;
   final String copyEvmAddressText;
+  final String renameAccountText;
   final String deleteText;
   final String exportAccountText;
 
@@ -29,10 +40,12 @@ class AccountBox extends StatelessWidget {
     required this.onSelected,
     this.onMenuAction,
     this.lightTheme = false,
+    this.showBalance = true,
     this.selectedText = 'Selected',
     this.addressPrefix = 'Address',
     this.selectAccountText = 'Select Account',
     this.copyEvmAddressText = 'Copy EVM Address',
+    this.renameAccountText = 'Rename Account',
     this.deleteText = 'Delete',
     this.exportAccountText = 'Export Account',
   }) : super(key: key);
@@ -52,6 +65,7 @@ class AccountBox extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 360;
+            final avatarSize = compact ? 68.0 : 76.0;
             return Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -104,7 +118,13 @@ class AccountBox extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        _buildAddressAvatar(address),
+                        AddressPatternAvatar(
+                          seed: address,
+                          size: avatarSize,
+                          innerSize: compact ? 54 : 60,
+                          dotSize: compact ? 9 : 10,
+                          dotCount: 25,
+                        ),
                         const Gap(10),
                         Expanded(
                           child: Padding(
@@ -142,14 +162,17 @@ class AccountBox extends StatelessWidget {
                                                 height: compact ? 14 : 16,
                                               ),
                                               const Gap(4),
-                                              Text(
-                                                '$balance REEF',
-                                                overflow: TextOverflow.fade,
-                                                softWrap: false,
-                                                style: GoogleFonts.poppins(
-                                                  color: Colors.white,
-                                                  fontSize: compact ? 12 : 14,
-                                                  fontWeight: FontWeight.w600,
+                                              BlurableContent(
+                                                showContent: showBalance,
+                                                child: Text(
+                                                  '$balance REEF',
+                                                  overflow: TextOverflow.fade,
+                                                  softWrap: false,
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.white,
+                                                    fontSize: compact ? 12 : 14,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -176,7 +199,8 @@ class AccountBox extends StatelessWidget {
                                     ),
                                     children: <TextSpan>[
                                       TextSpan(
-                                        text: ' ${_shortAddress(address)}',
+                                        text:
+                                            ' ${AddressUtils.shorten(address, prefixLength: 4)}',
                                         style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
@@ -225,6 +249,16 @@ class AccountBox extends StatelessWidget {
                               ),
                             ),
                             PopupMenuItem(
+                              value: AccountMenuAction.renameAccount,
+                              child: Text(
+                                renameAccountText,
+                                style: TextStyle(
+                                  color: Color(0xFF1F1F28),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            PopupMenuItem(
                               value: AccountMenuAction.delete,
                               child: Text(
                                 deleteText,
@@ -256,51 +290,5 @@ class AccountBox extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Widget _buildAddressAvatar(String seed) {
-    final colors = <Color>[
-      const Color(0xFF2D8CFF),
-      const Color(0xFF6CCB2F),
-      const Color(0xFFD873C0),
-      const Color(0xFF8D7BFF),
-      const Color(0xFF6EC6DE),
-      const Color(0xFFE58DA0),
-    ];
-    final bytes = seed.codeUnits;
-    return Container(
-      width: 76,
-      height: 76,
-      decoration: const BoxDecoration(
-        color: Color(0xFFEFF0F2),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: SizedBox(
-          width: 60,
-          height: 60,
-          child: Wrap(
-            spacing: 2,
-            runSpacing: 2,
-            children: List.generate(25, (index) {
-              final v = bytes[(index * 7) % bytes.length];
-              return Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: colors[v % colors.length],
-                  shape: BoxShape.circle,
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _shortAddress(String value) {
-    if (value.length < 10) return value;
-    return '${value.substring(0, 4)}...${value.substring(value.length - 4)}';
   }
 }

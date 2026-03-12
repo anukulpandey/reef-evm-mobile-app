@@ -1,21 +1,25 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 import '../models/token.dart';
+import '../models/pool.dart';
 import '../l10n/app_localizations.dart';
+import '../core/config/dex_config.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/pool_provider.dart';
+import '../providers/navigation_provider.dart';
 import '../core/theme/styles.dart';
-import '../utils/token_icon_resolver.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
+import '../widgets/blurable_content.dart';
+import '../widgets/common/token_avatar.dart';
+import '../widgets/home/balance_header_delegate.dart';
+import 'pool_detail_screen.dart';
 import 'send_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -62,7 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   SliverPersistentHeader(
-                    delegate: _BalanceHeaderDelegate(
+                    delegate: HomeBalanceHeaderDelegate(
                       portfolioUsd: walletState.portfolioUsd,
                       showBalance: walletState.showBalance,
                       balanceTitle: l10n.balanceTitle,
@@ -261,7 +265,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             final token = tokens[index];
             return Padding(
               padding: const EdgeInsets.only(bottom: 18.0),
-              child: _buildTokenCard(token),
+              child: _buildTokenCard(token, state.showBalance),
             );
           }, childCount: tokens.length),
         ),
@@ -281,70 +285,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  Widget _buildTokenCard(Token token) {
+  Widget _buildTokenCard(Token token, bool showBalance) {
     final l10n = AppLocalizations.of(context);
     return ViewBoxContainer(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.white,
-                  child: _buildTokenIcon(token),
-                ),
-                const Gap(15),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final rightMaxWidth = (constraints.maxWidth * 0.38).clamp(
+                  110.0,
+                  165.0,
+                );
+                return Row(
                   children: [
-                    Text(
-                      token.name,
-                      style: GoogleFonts.poppins(
-                        color: Styles.textColor,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: Colors.white,
+                      child: TokenAvatar(
+                        size: 32,
+                        iconUrl: token.iconUrl,
+                        fallbackSeed: token.symbol,
+                        resolveFallbackIcon: true,
+                        badgeText: _wrappedEtherBadge(token),
                       ),
                     ),
-                    Text(
-                      _formatUsdPrice(token.usdPrice ?? 0),
-                      style: const TextStyle(
-                        color: Styles.textLightColor,
-                        fontSize: 14,
+                    const Gap(15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            token.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              color: Styles.textColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            _formatUsdPrice(token.usdPrice ?? 0),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Styles.textLightColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Gap(8),
+                    SizedBox(
+                      width: rightMaxWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          BlurableContent(
+                            showContent: showBalance,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: GradientText(
+                                _formatUsdValue(token.usdValue ?? 0),
+                                gradient: textGradient(),
+                                style: GoogleFonts.poppins(
+                                  color: Styles.textColor,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ),
+                          BlurableContent(
+                            showContent: showBalance,
+                            child: Text(
+                              '${token.balance} ${token.symbol}',
+                              style: const TextStyle(
+                                color: Styles.textColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    GradientText(
-                      _formatUsdValue(token.usdValue ?? 0),
-                      gradient: textGradient(),
-                      style: GoogleFonts.poppins(
-                        color: Styles.textColor,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: Text(
-                        '${token.balance} ${token.symbol}',
-                        style: const TextStyle(
-                          color: Styles.textColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                );
+              },
             ),
             const Gap(15),
             Row(
@@ -377,6 +411,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                 ),
+                const Gap(10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(
+                      Icons.swap_horiz_rounded,
+                      color: Styles.secondaryAccentColorDark,
+                      size: 18,
+                    ),
+                    label: const Text(
+                      'Swap',
+                      style: TextStyle(
+                        color: Styles.secondaryAccentColorDark,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(
+                        color: Styles.secondaryAccentColorDark,
+                        width: 1.5,
+                      ),
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      backgroundColor: Colors.white.withOpacity(0.3),
+                    ),
+                    onPressed: () => _openSwapForToken(token),
+                  ),
+                ),
               ],
             ),
           ],
@@ -385,84 +446,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildTokenIcon(Token token) {
-    final iconUrl =
-        token.iconUrl ??
-        TokenIconResolver.resolveTokenIconUrl(
-          address: token.address,
-          symbol: token.symbol,
-        );
-    final imageProvider = _resolveImageProvider(iconUrl);
-    final svgData = _resolveSvgData(iconUrl);
-
-    if (svgData != null) {
-      return ClipOval(
-        child: SvgPicture.string(
-          svgData,
-          width: 32,
-          height: 32,
-          fit: BoxFit.cover,
-        ),
-      );
-    }
-
-    if (imageProvider != null) {
-      return ClipOval(
-        child: Image(
-          image: imageProvider,
-          width: 32,
-          height: 32,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.circle, color: Styles.primaryColor, size: 14),
-        ),
-      );
-    }
-
-    return const Icon(Icons.circle, color: Styles.primaryColor, size: 14);
-  }
-
-  static ImageProvider? _resolveImageProvider(String? iconUrl) {
-    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
-    final normalized = iconUrl.trim();
-    final dataUri = _tryParseDataUri(normalized);
-    if (dataUri != null) {
-      if (dataUri.mimeType.contains('svg')) return null;
-      final bytes = dataUri.contentAsBytes();
-      if (bytes.isEmpty) return null;
-      return MemoryImage(bytes);
-    }
-
-    final uri = Uri.tryParse(normalized);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return null;
-    }
-
-    return NetworkImage(normalized);
-  }
-
-  static String? _resolveSvgData(String? iconUrl) {
-    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
-    final uriData = _tryParseDataUri(iconUrl.trim());
-    if (uriData == null || !uriData.mimeType.contains('svg')) return null;
-    final bytes = uriData.contentAsBytes();
-    if (bytes.isEmpty) return null;
-    return utf8.decode(bytes, allowMalformed: true);
-  }
-
-  static UriData? _tryParseDataUri(String value) {
-    if (!value.startsWith('data:')) return null;
-    try {
-      return UriData.parse(value);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _showSendTokenDialog(BuildContext context, Token token) async {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => SendScreen(token: token)));
+  }
+
+  Future<void> _openSwapForToken(Token token) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      final pools = await ref.read(poolsProvider.future);
+      if (!mounted) return;
+      final matchingPool = _findBestPoolForToken(token, pools);
+      if (matchingPool != null) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                PoolDetailScreen(pool: matchingPool, swapOnly: true),
+          ),
+        );
+        return;
+      }
+    } catch (_) {
+      // Fall through to pools tab if direct pool lookup fails.
+    }
+
+    ref.read(navigationTabProvider.notifier).setIndex(2);
+    if (!mounted) return;
+    scaffoldMessenger.showSnackBar(
+      SnackBar(content: Text('No direct ${token.symbol} pool found.')),
+    );
+  }
+
+  Pool? _findBestPoolForToken(Token token, List<Pool> pools) {
+    if (pools.isEmpty) return null;
+    final tokenAddress = token.address.trim().toLowerCase();
+    final wrappedReefAddress = DexConfig.wrappedReefAddress.toLowerCase();
+    final tokenIsReefLike = _isReefLikeToken(token.symbol, token.address);
+
+    bool poolContainsToken(Pool pool) {
+      final token0 = pool.token0Address.trim().toLowerCase();
+      final token1 = pool.token1Address.trim().toLowerCase();
+      if (tokenIsReefLike) {
+        return token0 == wrappedReefAddress || token1 == wrappedReefAddress;
+      }
+      return token0 == tokenAddress || token1 == tokenAddress;
+    }
+
+    bool poolContainsReef(Pool pool) {
+      final token0 = pool.token0Address.trim().toLowerCase();
+      final token1 = pool.token1Address.trim().toLowerCase();
+      return token0 == wrappedReefAddress || token1 == wrappedReefAddress;
+    }
+
+    final directMatches = pools.where(poolContainsToken).toList();
+    if (directMatches.isEmpty) return null;
+
+    for (final pool in directMatches) {
+      if (poolContainsReef(pool)) return pool;
+    }
+    return directMatches.first;
   }
 
   static String _formatUsdPrice(double value) {
@@ -483,94 +526,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     return NumberFormat.currency(symbol: '\$', decimalDigits: 6).format(value);
   }
-}
 
-class _BalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final double portfolioUsd;
-  final bool showBalance;
-  final String balanceTitle;
-  final VoidCallback onToggleVisibility;
-
-  _BalanceHeaderDelegate({
-    required this.portfolioUsd,
-    required this.showBalance,
-    required this.balanceTitle,
-    required this.onToggleVisibility,
-  });
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    if (shrinkOffset > 80) {
-      return const SizedBox.shrink();
-    }
-    double opacity = ((shrinkOffset - 180) / 180).abs();
-    if (opacity < 0) opacity = 0;
-    if (opacity > 1) opacity = 1;
-
-    return Opacity(
-      opacity: opacity,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  balanceTitle,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: Styles.primaryColor,
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    showBalance ? Icons.remove_red_eye : Icons.visibility_off,
-                    color: Styles.textLightColor,
-                  ),
-                  onPressed: onToggleVisibility,
-                ),
-              ],
-            ),
-            Center(
-              child: GradientText(
-                showBalance
-                    ? (portfolioUsd >= 0.01
-                          ? NumberFormat.currency(
-                              symbol: '\$',
-                              decimalDigits: 2,
-                            ).format(portfolioUsd)
-                          : NumberFormat.currency(
-                              symbol: '\$',
-                              decimalDigits: 6,
-                            ).format(portfolioUsd))
-                    : '******',
-                gradient: textGradient(),
-                style: GoogleFonts.poppins(
-                  fontSize: 48,
-                  fontWeight: FontWeight.w800,
-                  color: Styles.textColor,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  static String? _wrappedEtherBadge(Token token) {
+    final symbol = token.symbol.trim().toUpperCase();
+    final name = token.name.trim().toUpperCase();
+    final isWrappedEther =
+        symbol == 'WETH' ||
+        symbol.startsWith('WETH') ||
+        name == 'WRAPPED ETHER' ||
+        name == 'WRAPPED ETH' ||
+        name.contains('WRAPPED ETHER');
+    return isWrappedEther ? 'W' : null;
   }
 
-  @override
-  double get maxExtent => 180;
-  @override
-  double get minExtent => 0;
-  @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
-      true;
+  static bool _isReefLikeToken(String symbol, String address) {
+    final normalizedSymbol = symbol.trim().toUpperCase();
+    final normalizedAddress = address.trim().toLowerCase();
+    return normalizedSymbol == 'REEF' ||
+        normalizedSymbol == 'WREEF' ||
+        normalizedAddress == 'native' ||
+        normalizedAddress == DexConfig.wrappedReefAddress.toLowerCase();
+  }
 }

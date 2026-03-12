@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'service_providers.dart';
+import '../constants/storage_keys.dart';
 
 class SettingsState {
   final String rpcUrl;
@@ -35,12 +36,14 @@ class SettingsState {
 }
 
 class SettingsNotifier extends Notifier<SettingsState> {
+  static const String _defaultRpcUrl = 'http://localhost:8545';
+
   @override
   SettingsState build() {
     // Initial state
     Future.microtask(() => _loadSettings());
     return SettingsState(
-      rpcUrl: 'http://localhost:8545',
+      rpcUrl: _defaultRpcUrl,
       useBiometrics: false,
       goHomeOnSwitch: true,
       developerExpanded: false,
@@ -49,9 +52,9 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final rpc = prefs.getString('rpc_url') ?? 'http://localhost:8545';
-    final biometrics = prefs.getBool('use_biometrics') ?? false;
-    final goHome = prefs.getBool('go_home_on_switch') ?? true;
+    final rpc = prefs.getString(StorageKeys.rpcUrl) ?? _defaultRpcUrl;
+    final biometrics = prefs.getBool(StorageKeys.useBiometrics) ?? false;
+    final goHome = prefs.getBool(StorageKeys.goHomeOnSwitch) ?? true;
 
     state = state.copyWith(
       rpcUrl: rpc,
@@ -66,7 +69,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   Future<void> setRpcUrl(String rpcUrl) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('rpc_url', rpcUrl);
+    await prefs.setString(StorageKeys.rpcUrl, rpcUrl);
     state = state.copyWith(rpcUrl: rpcUrl);
 
     // Update Web3 Service
@@ -75,13 +78,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   Future<void> setBiometrics(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('use_biometrics', enabled);
+    await prefs.setBool(StorageKeys.useBiometrics, enabled);
     state = state.copyWith(useBiometrics: enabled);
   }
 
   Future<void> setGoHomeOnSwitch(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('go_home_on_switch', enabled);
+    await prefs.setBool(StorageKeys.goHomeOnSwitch, enabled);
     state = state.copyWith(goHomeOnSwitch: enabled);
   }
 

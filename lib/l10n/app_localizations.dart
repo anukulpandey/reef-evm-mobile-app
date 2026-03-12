@@ -81,9 +81,18 @@ class AppLocalizations {
   String get addressLabel => _get('addressLabel');
   String get selectAccount => _get('selectAccount');
   String get copyEvmAddress => _get('copyEvmAddress');
+  String get renameAccount => _get('renameAccount');
+  String get renameAccountTitle => _get('renameAccountTitle');
+  String get accountNameLabel => _get('accountNameLabel');
   String get availableAccounts => _get('availableAccounts');
   String get accountSelected => _get('accountSelected');
   String get evmAddressCopied => _get('evmAddressCopied');
+  String get accountRenamed => _get('accountRenamed');
+  String get setPasswordBeforeExport => _get('setPasswordBeforeExport');
+  String get sortByBalance => _get('sortByBalance');
+  String get defaultOrder => _get('defaultOrder');
+  String get balanceHighToLow => _get('balanceHighToLow');
+  String get balanceLowToHigh => _get('balanceLowToHigh');
   String get deleteAccount => _get('deleteAccount');
   String get deleteAccountConfirm => _get('deleteAccountConfirm');
   String get deleteLabel => _get('deleteLabel');
@@ -192,9 +201,19 @@ _localizedValues = <String, Map<String, String>>{
     'addressLabel': 'Address',
     'selectAccount': 'Select Account',
     'copyEvmAddress': 'Copy EVM Address',
+    'renameAccount': 'Rename Account',
+    'renameAccountTitle': 'Rename Account',
+    'accountNameLabel': 'Account Name',
     'availableAccounts': 'Available',
     'accountSelected': 'Account selected',
     'evmAddressCopied': 'EVM address copied',
+    'accountRenamed': 'Account renamed',
+    'setPasswordBeforeExport':
+        'Set an app password in Settings before exporting an account.',
+    'sortByBalance': 'Sort Accounts',
+    'defaultOrder': 'Default Order',
+    'balanceHighToLow': 'Balance: High to Low',
+    'balanceLowToHigh': 'Balance: Low to High',
     'deleteAccount': 'Delete account',
     'deleteAccountConfirm': 'This will clear the currently active account.',
     'deleteLabel': 'Delete',
@@ -282,9 +301,19 @@ _localizedValues = <String, Map<String, String>>{
     'addressLabel': 'पता',
     'selectAccount': 'अकाउंट चुनें',
     'copyEvmAddress': 'EVM पता कॉपी करें',
+    'renameAccount': 'अकाउंट का नाम बदलें',
+    'renameAccountTitle': 'अकाउंट का नाम बदलें',
+    'accountNameLabel': 'अकाउंट नाम',
     'availableAccounts': 'उपलब्ध',
     'accountSelected': 'अकाउंट चुना गया',
     'evmAddressCopied': 'EVM पता कॉपी हुआ',
+    'accountRenamed': 'अकाउंट का नाम बदल गया',
+    'setPasswordBeforeExport':
+        'अकाउंट एक्सपोर्ट करने से पहले सेटिंग्स में ऐप पासवर्ड सेट करें।',
+    'sortByBalance': 'अकाउंट सॉर्ट करें',
+    'defaultOrder': 'डिफ़ॉल्ट क्रम',
+    'balanceHighToLow': 'बैलेंस: ज़्यादा से कम',
+    'balanceLowToHigh': 'बैलेंस: कम से ज़्यादा',
     'deleteAccount': 'अकाउंट हटाएं',
     'deleteAccountConfirm': 'यह वर्तमान सक्रिय अकाउंट को हटा देगा।',
     'deleteLabel': 'हटाएं',
@@ -372,9 +401,19 @@ _localizedValues = <String, Map<String, String>>{
     'addressLabel': 'Indirizzo',
     'selectAccount': 'Seleziona Account',
     'copyEvmAddress': 'Copia Indirizzo EVM',
+    'renameAccount': 'Rinomina Account',
+    'renameAccountTitle': 'Rinomina Account',
+    'accountNameLabel': 'Nome Account',
     'availableAccounts': 'Disponibili',
     'accountSelected': 'Account selezionato',
     'evmAddressCopied': 'Indirizzo EVM copiato',
+    'accountRenamed': 'Account rinominato',
+    'setPasswordBeforeExport':
+        'Imposta una password app nelle Impostazioni prima di esportare un account.',
+    'sortByBalance': 'Ordina Account',
+    'defaultOrder': 'Ordine Predefinito',
+    'balanceHighToLow': 'Saldo: Alto-Basso',
+    'balanceLowToHigh': 'Saldo: Basso-Alto',
     'deleteAccount': 'Elimina account',
     'deleteAccountConfirm': 'Questo cancellerà l\'account attualmente attivo.',
     'deleteLabel': 'Elimina',

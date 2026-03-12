@@ -1,35 +1,56 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
+import 'package:intl/intl.dart';
 
 import '../core/config/dex_config.dart';
 import '../core/theme/styles.dart';
 import '../models/pool.dart';
 import '../models/pool_transaction.dart';
+import '../models/transaction_preview.dart';
 import '../providers/pool_provider.dart';
 import '../providers/service_providers.dart';
 import '../providers/wallet_provider.dart';
+import '../utils/address_utils.dart';
+import '../utils/amount_utils.dart';
+import '../widgets/blurable_content.dart';
+import '../widgets/common/token_avatar.dart';
+import 'transaction_confirmation_screen.dart';
 
 enum _ChartMetric { price, volume, liquidity, fees }
 
 enum _ChartTimeframe { h1, d1, w1, m1 }
 
 class PoolDetailScreen extends ConsumerStatefulWidget {
-  const PoolDetailScreen({super.key, required this.pool});
+  const PoolDetailScreen({
+    super.key,
+    required this.pool,
+    this.swapOnly = false,
+  });
 
   final Pool pool;
+  final bool swapOnly;
 
   @override
   ConsumerState<PoolDetailScreen> createState() => _PoolDetailScreenState();
 }
 
 class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
+  static const Color _screenBg = Color(0xFF17002D);
+  static const Color _cardBg = Color(0xFF22123E);
+  static const Color _cardBgAlt = Color(0xFF271648);
+  static const Color _cardBorder = Color(0xFF4A2F73);
+  static const Color _titleText = Color(0xFFF3EEFF);
+  static const Color _bodyText = Color(0xFFD1C6EB);
+  static const Color _mutedText = Color(0xFFA79BBC);
+  static const Color _inputBg = Color(0xFF312151);
+  static const Color _inputBorder = Color(0xFF6C4AA0);
+  static const Color _accent = Color(0xFFA742D5);
+
   final TextEditingController _amountController = TextEditingController();
   int _quoteRequestId = 0;
 
@@ -171,47 +192,65 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     final account = walletState.activeAccount;
     final inAsset = _assetIn;
     if (account == null || inAsset.isNative) return;
-
-    final authorized = await _authenticateTransaction(
-      reason: 'Authenticate to approve token spending',
+    final approvalAmount = _inputRaw > BigInt.zero ? _inputRaw : BigInt.one;
+    final preview = await _buildApprovePreview(
+      ownerAddress: account.address,
+      inAsset: inAsset,
+      approvalAmount: approvalAmount,
     );
-    if (!authorized) return;
+    if (!mounted) return;
 
-    setState(() {
-      _isApproving = true;
-      _swapError = null;
-    });
+    final result = await Navigator.of(context).push<TransactionApprovalResult>(
+      MaterialPageRoute(
+        builder: (_) => TransactionConfirmationScreen(
+          preview: preview,
+          approveButtonText: 'Approve',
+          rejectButtonText: 'Reject',
+          onApprove: () async {
+            if (mounted) {
+              setState(() {
+                _isApproving = true;
+                _swapError = null;
+              });
+            }
+            try {
+              return await ref
+                  .read(web3ServiceProvider)
+                  .approveErc20(
+                    account: account,
+                    tokenAddress: inAsset.address,
+                    spender: DexConfig.routerAddress,
+                    amount: approvalAmount,
+                  );
+            } finally {
+              if (mounted) {
+                setState(() => _isApproving = false);
+              }
+            }
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result == null || !result.approved || (result.txHash ?? '').isEmpty) {
+      return;
+    }
 
     try {
-      final maxApproval = BigInt.parse(
-        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-        radix: 16,
-      );
-      final txHash = await ref
-          .read(web3ServiceProvider)
-          .approveErc20(
-            account: account,
-            tokenAddress: inAsset.address,
-            spender: DexConfig.routerAddress,
-            amount: maxApproval,
-          );
-      if (!mounted) return;
       setState(() {
-        _lastTxHash = txHash;
-        _allowanceEnough = true;
+        _lastTxHash = result.txHash;
       });
+      await _refreshQuoteAndAllowance();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Approval submitted: ${_shortHash(txHash)}')),
+        SnackBar(
+          content: Text('Approval submitted: ${_shortHash(result.txHash!)}'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _swapError = e.toString().replaceFirst('Exception: ', '');
       });
-    } finally {
-      if (mounted) {
-        setState(() => _isApproving = false);
-      }
     }
   }
 
@@ -220,11 +259,6 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     final account = walletState.activeAccount;
     if (account == null) return;
     if (_inputRaw <= BigInt.zero || _quotedOutRaw <= BigInt.zero) return;
-
-    final authorized = await _authenticateTransaction(
-      reason: 'Authenticate to confirm this swap',
-    );
-    if (!authorized) return;
 
     final inAsset = _assetIn;
     final outAsset = _assetOut;
@@ -238,69 +272,87 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     final amountOutMin =
         _quotedOutRaw - ((_quotedOutRaw * slippageBps) ~/ BigInt.from(10000));
     final path = <String>[inAsset.routerAddress, outAsset.routerAddress];
+    final preview = await _buildSwapPreview(
+      accountAddress: account.address,
+      inAsset: inAsset,
+      outAsset: outAsset,
+      amountOutMin: amountOutMin,
+      deadline: deadline,
+      path: path,
+    );
+    if (!mounted) return;
+
+    final result = await Navigator.of(context).push<TransactionApprovalResult>(
+      MaterialPageRoute(
+        builder: (_) => TransactionConfirmationScreen(
+          preview: preview,
+          approveButtonText: 'Approve Swap',
+          rejectButtonText: 'Reject',
+          onApprove: () async {
+            if (mounted) {
+              setState(() {
+                _isSubmittingSwap = true;
+                _swapError = null;
+              });
+            }
+            try {
+              final web3 = ref.read(web3ServiceProvider);
+              if (inAsset.isNative) {
+                return await web3.swapExactEthForTokens(
+                  account: account,
+                  routerAddress: DexConfig.routerAddress,
+                  amountInWei: _inputRaw,
+                  amountOutMin: amountOutMin,
+                  path: path,
+                  to: account.address,
+                  deadline: deadline,
+                );
+              }
+              if (outAsset.isNative) {
+                return await web3.swapExactTokensForEth(
+                  account: account,
+                  routerAddress: DexConfig.routerAddress,
+                  amountIn: _inputRaw,
+                  amountOutMin: amountOutMin,
+                  path: path,
+                  to: account.address,
+                  deadline: deadline,
+                );
+              }
+              return await web3.swapExactTokensForTokens(
+                account: account,
+                routerAddress: DexConfig.routerAddress,
+                amountIn: _inputRaw,
+                amountOutMin: amountOutMin,
+                path: path,
+                to: account.address,
+                deadline: deadline,
+              );
+            } finally {
+              if (mounted) {
+                setState(() => _isSubmittingSwap = false);
+              }
+            }
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result == null || !result.approved || (result.txHash ?? '').isEmpty) {
+      return;
+    }
 
     setState(() {
-      _isSubmittingSwap = true;
-      _swapError = null;
+      _lastTxHash = result.txHash;
+      _amountController.clear();
+      _quotedOutRaw = BigInt.zero;
+      _quotedOutDisplay = '0';
     });
-
-    try {
-      final web3 = ref.read(web3ServiceProvider);
-      late final String txHash;
-      if (inAsset.isNative) {
-        txHash = await web3.swapExactEthForTokens(
-          account: account,
-          routerAddress: DexConfig.routerAddress,
-          amountInWei: _inputRaw,
-          amountOutMin: amountOutMin,
-          path: path,
-          to: account.address,
-          deadline: deadline,
-        );
-      } else if (outAsset.isNative) {
-        txHash = await web3.swapExactTokensForEth(
-          account: account,
-          routerAddress: DexConfig.routerAddress,
-          amountIn: _inputRaw,
-          amountOutMin: amountOutMin,
-          path: path,
-          to: account.address,
-          deadline: deadline,
-        );
-      } else {
-        txHash = await web3.swapExactTokensForTokens(
-          account: account,
-          routerAddress: DexConfig.routerAddress,
-          amountIn: _inputRaw,
-          amountOutMin: amountOutMin,
-          path: path,
-          to: account.address,
-          deadline: deadline,
-        );
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _lastTxHash = txHash;
-        _amountController.clear();
-        _quotedOutRaw = BigInt.zero;
-        _quotedOutDisplay = '0';
-      });
-      ref.invalidate(walletProvider);
-      ref.invalidate(poolsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Swap submitted: ${_shortHash(txHash)}')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _swapError = e.toString().replaceFirst('Exception: ', '');
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmittingSwap = false);
-      }
-    }
+    ref.invalidate(walletProvider);
+    ref.invalidate(poolsProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Swap submitted: ${_shortHash(result.txHash!)}')),
+    );
   }
 
   void _flipPair() {
@@ -315,56 +367,102 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     });
   }
 
-  Future<bool> _authenticateTransaction({required String reason}) async {
-    final authService = ref.read(authServiceProvider);
-    final ok = await authService.authenticateForTransaction(
-      localizedReason: reason,
-    );
-    if (ok) return true;
-    if (!mounted) return false;
-    setState(() {
-      _swapError = 'Biometric authentication failed';
-    });
-    return false;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final walletState = ref.watch(walletProvider);
-    final poolService = ref.read(poolServiceProvider);
-    final inAsset = _assetIn;
-    final outAsset = _assetOut;
-    final inBalance = _balanceForAsset(walletState, inAsset);
-    final outBalance = _balanceForAsset(walletState, outAsset);
-    final inputBalanceRaw =
-        _toRawFromBalance(inBalance, inAsset.decimals) ?? BigInt.zero;
-    final hasSufficientBalance =
-        _inputRaw == BigInt.zero || _inputRaw <= inputBalanceRaw;
-    final canSwap =
-        _inputRaw > BigInt.zero &&
-        _quotedOutRaw > BigInt.zero &&
-        hasSufficientBalance &&
-        !_isSubmittingSwap &&
-        !_isApproving &&
-        !_isLoadingQuote &&
-        (_allowanceEnough || inAsset.isNative);
-    final requiresApproval =
-        _inputRaw > BigInt.zero && !inAsset.isNative && !_allowanceEnough;
+    final pairLabel =
+        '${widget.pool.token0Symbol} / ${widget.pool.token1Symbol}';
+    final appBarTitle = widget.swapOnly ? 'Swap $pairLabel' : pairLabel;
 
+    if (widget.swapOnly) {
+      final walletState = ref.watch(walletProvider);
+      final inAsset = _assetIn;
+      final outAsset = _assetOut;
+      final inBalance = _balanceForAsset(walletState, inAsset);
+      final outBalance = _balanceForAsset(walletState, outAsset);
+      final inputBalanceRaw =
+          _toRawFromBalance(inBalance, inAsset.decimals) ?? BigInt.zero;
+      final hasSufficientBalance =
+          _inputRaw == BigInt.zero || _inputRaw <= inputBalanceRaw;
+      final canSwap =
+          _inputRaw > BigInt.zero &&
+          _quotedOutRaw > BigInt.zero &&
+          hasSufficientBalance &&
+          !_isSubmittingSwap &&
+          !_isApproving &&
+          !_isLoadingQuote &&
+          (_allowanceEnough || inAsset.isNative);
+      final requiresApproval =
+          _inputRaw > BigInt.zero && !inAsset.isNative && !_allowanceEnough;
+
+      return Scaffold(
+        backgroundColor: _screenBg,
+        appBar: AppBar(
+          backgroundColor: _screenBg,
+          elevation: 0,
+          title: Text(
+            appBarTitle,
+            style: const TextStyle(
+              color: _titleText,
+              fontWeight: FontWeight.w800,
+              fontSize: 22,
+            ),
+          ),
+          iconTheme: const IconThemeData(color: _titleText),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          children: [
+            _buildPoolHeaderCard(widget.pool),
+            const Gap(14),
+            _buildSwapCard(
+              inAsset: inAsset,
+              outAsset: outAsset,
+              inBalance: inBalance,
+              outBalance: outBalance,
+              requiresApproval: requiresApproval,
+              canSwap: canSwap,
+              hasSufficientBalance: hasSufficientBalance,
+            ),
+            if (_swapError != null) ...[
+              const Gap(10),
+              Text(
+                _swapError!,
+                style: const TextStyle(
+                  color: Color(0xFFFF6C6C),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+            if (_lastTxHash != null) ...[
+              const Gap(6),
+              Text(
+                'Last tx: ${_shortHash(_lastTxHash!)}',
+                style: const TextStyle(
+                  color: _bodyText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final poolService = ref.read(poolServiceProvider);
     return Scaffold(
-      backgroundColor: const Color(0xFF2B0052),
+      backgroundColor: _screenBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2B0052),
+        backgroundColor: _screenBg,
         elevation: 0,
         title: Text(
-          '${widget.pool.token0Symbol} / ${widget.pool.token1Symbol}',
+          appBarTitle,
           style: const TextStyle(
-            color: Colors.white,
+            color: _titleText,
             fontWeight: FontWeight.w800,
             fontSize: 22,
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: _titleText),
       ),
       body: FutureBuilder<List<PoolTransactionEvent>>(
         future: poolService.getPairTransactions(widget.pool.id),
@@ -379,35 +477,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               const Gap(14),
               _buildChartCard(chartSeries),
               const Gap(14),
-              _buildSwapCard(
-                inAsset: inAsset,
-                outAsset: outAsset,
-                inBalance: inBalance,
-                outBalance: outBalance,
-                requiresApproval: requiresApproval,
-                canSwap: canSwap,
-                hasSufficientBalance: hasSufficientBalance,
-              ),
-              if (_swapError != null) ...[
-                const Gap(10),
-                Text(
-                  _swapError!,
-                  style: const TextStyle(
-                    color: Color(0xFFFF6C6C),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-              if (_lastTxHash != null) ...[
-                const Gap(6),
-                Text(
-                  'Last tx: ${_shortHash(_lastTxHash!)}',
-                  style: const TextStyle(
-                    color: Color(0xFFC9B6EC),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+              _buildTradeCtaCard(),
             ],
           );
         },
@@ -415,66 +485,175 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     );
   }
 
-  Widget _buildPoolHeaderCard(Pool pool) {
+  Widget _buildTradeCtaCard() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFECEAF1),
+        color: _cardBg,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cardBorder),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Trade',
+            style: TextStyle(
+              color: _titleText,
+              fontSize: Styles.fsCardTitle,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const Gap(6),
+          const Text(
+            'Open swap for this pair in a dedicated screen.',
+            style: TextStyle(
+              color: _bodyText,
+              fontWeight: FontWeight.w600,
+              fontSize: Styles.fsCaption,
+            ),
+          ),
+          const Gap(14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _openSwapScreen,
+              icon: const Icon(
+                Icons.swap_horiz_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              label: const Text(
+                'Trade This Pair',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: Styles.fsBodyStrong,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7A3ED5),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openSwapScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PoolDetailScreen(pool: widget.pool, swapOnly: true),
+      ),
+    );
+  }
+
+  Widget _buildPoolHeaderCard(Pool pool) {
+    final pairTitle = '${pool.token0Symbol} - ${pool.token1Symbol}';
+    final ticker =
+        '${pool.token0Symbol.toUpperCase()}/${pool.token1Symbol.toUpperCase()}';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_cardBg, _cardBgAlt],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _cardBorder),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x660C0418),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Stack(
-                  children: [
-                    _buildTokenAvatar(
-                      iconUrl: pool.tokenIcons.isNotEmpty
-                          ? pool.tokenIcons[0]
-                          : null,
-                      fallbackSeed: pool.token0Symbol,
-                      size: 34,
-                    ),
-                    Positioned(
-                      left: 20,
-                      child: _buildTokenAvatar(
-                        iconUrl: pool.tokenIcons.length > 1
-                            ? pool.tokenIcons[1]
-                            : null,
-                        fallbackSeed: pool.token1Symbol,
-                        size: 34,
-                      ),
-                    ),
-                  ],
+                TokenPairAvatar(
+                  firstIconUrl: pool.tokenIcons.isNotEmpty
+                      ? pool.tokenIcons[0]
+                      : null,
+                  secondIconUrl: pool.tokenIcons.length > 1
+                      ? pool.tokenIcons[1]
+                      : null,
+                  firstSeed: pool.token0Symbol,
+                  secondSeed: pool.token1Symbol,
+                  avatarSize: 40,
+                  overlapOffset: 24,
+                  resolveFallbackIcon: true,
+                  imageFit: BoxFit.contain,
+                  imagePadding: const EdgeInsets.all(4),
+                  avatarBackgroundColor: Colors.white,
                 ),
-                const Gap(44),
+                const Gap(12),
                 Expanded(
-                  child: Text(
-                    '${pool.token0Symbol} - ${pool.token1Symbol}',
-                    style: const TextStyle(
-                      color: Color(0xFF221C2E),
-                      fontWeight: FontWeight.w900,
-                      fontSize: Styles.fsCardTitle,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        pairTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _titleText,
+                          fontWeight: FontWeight.w900,
+                          fontSize: Styles.fsSectionTitle,
+                          height: 1.05,
+                        ),
+                      ),
+                      const Gap(2),
+                      Text(
+                        ticker,
+                        style: const TextStyle(
+                          color: _bodyText,
+                          fontWeight: FontWeight.w700,
+                          fontSize: Styles.fsCaption,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Gap(14),
+            Row(
+              children: [
+                Expanded(
+                  child: _metricTile(
+                    label: 'TVL',
+                    value: AmountUtils.formatShortUsd(pool.reserveUsd),
+                  ),
+                ),
+                const Gap(8),
+                Expanded(
+                  child: _metricTile(
+                    label: '24h Volume',
+                    value: AmountUtils.formatShortUsd(pool.volumeUsd),
                   ),
                 ),
               ],
             ),
             const Gap(10),
-            _statLine('TVL', _formatUsd(pool.reserveUsd)),
-            const Gap(4),
-            _statLine('24h Volume', _formatUsd(pool.volumeUsd)),
-            const Gap(4),
-            _statLine(
-              'Rate',
-              '1 ${pool.token0Symbol} = ${_formatRate(pool.token0Price)} ${pool.token1Symbol}',
+            _rateLine(
+              '1 ${pool.token0Symbol} = ${AmountUtils.formatRate(pool.token0Price)} ${pool.token1Symbol}',
             ),
             const Gap(2),
-            _statLine(
-              '',
-              '1 ${pool.token1Symbol} = ${_formatRate(pool.token1Price)} ${pool.token0Symbol}',
+            _rateLine(
+              '1 ${pool.token1Symbol} = ${AmountUtils.formatRate(pool.token1Price)} ${pool.token0Symbol}',
             ),
           ],
         ),
@@ -482,29 +661,51 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     );
   }
 
-  Widget _statLine(String label, String value) {
-    return Row(
-      children: [
-        if (label.isNotEmpty)
+  Widget _metricTile({required String label, required String value}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0x33FFFFFF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            '$label: ',
+            label,
             style: const TextStyle(
-              color: Color(0xFF4A455B),
+              color: _mutedText,
               fontWeight: FontWeight.w800,
-              fontSize: Styles.fsBody,
+              fontSize: Styles.fsSmall,
             ),
           ),
-        Expanded(
-          child: Text(
+          const Gap(2),
+          Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF4A455B),
-              fontWeight: FontWeight.w700,
-              fontSize: Styles.fsBody,
+              color: _titleText,
+              fontWeight: FontWeight.w900,
+              fontSize: Styles.fsBodyStrong,
+              height: 1.0,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _rateLine(String text) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: _bodyText,
+        fontWeight: FontWeight.w700,
+        fontSize: Styles.fsBody,
+      ),
     );
   }
 
@@ -527,8 +728,9 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFECEAF1),
+        color: _cardBg,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cardBorder),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -538,7 +740,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
             const Text(
               'Pool Chart',
               style: TextStyle(
-                color: Color(0xFF221C2E),
+                color: _titleText,
                 fontWeight: FontWeight.w900,
                 fontSize: Styles.fsSectionTitle,
               ),
@@ -554,11 +756,11 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                   onSelected: (_) => setState(() => _chartMetric = metric),
                   label: Text(_chartMetricLabel(metric)),
                   labelStyle: TextStyle(
-                    color: selected ? Colors.white : const Color(0xFF4E4862),
+                    color: selected ? Colors.white : _bodyText,
                     fontWeight: FontWeight.w700,
                   ),
-                  selectedColor: const Color(0xFF7B39C8),
-                  backgroundColor: Colors.white,
+                  selectedColor: _accent,
+                  backgroundColor: const Color(0xFF301E54),
                 );
               }).toList(),
             ),
@@ -572,16 +774,14 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                   onPressed: () => setState(() => _chartTimeframe = frame),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                      color: selected
-                          ? const Color(0xFF7B39C8)
-                          : const Color(0xFFC7C2D6),
+                      color: selected ? _accent : const Color(0xFF5C4588),
                     ),
                     foregroundColor: selected
-                        ? const Color(0xFF7B39C8)
-                        : const Color(0xFF7F7A90),
+                        ? const Color(0xFFD8C6FF)
+                        : _bodyText,
                     backgroundColor: selected
-                        ? const Color(0xFFF3EFFF)
-                        : Colors.transparent,
+                        ? const Color(0xFF38215C)
+                        : const Color(0x1AFFFFFF),
                     visualDensity: const VisualDensity(
                       horizontal: -3,
                       vertical: -3,
@@ -600,7 +800,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                       child: Text(
                         'No chart data yet.',
                         style: TextStyle(
-                          color: Color(0xFF7E7892),
+                          color: _mutedText,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -617,7 +817,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                           drawVerticalLine: false,
                           horizontalInterval: (chartMaxY - chartMinY) / 4,
                           getDrawingHorizontalLine: (_) => const FlLine(
-                            color: Color(0xFFDDD8E9),
+                            color: Color(0x305E4E82),
                             strokeWidth: 1,
                           ),
                         ),
@@ -638,7 +838,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                                 return Text(
                                   _formatChartValue(value),
                                   style: const TextStyle(
-                                    color: Color(0xFF7E7892),
+                                    color: _mutedText,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -661,7 +861,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                                 return Text(
                                   _formatChartTime(points[idx].timestamp),
                                   style: const TextStyle(
-                                    color: Color(0xFF7E7892),
+                                    color: _mutedText,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -678,7 +878,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                                   FlSpot(idx.toDouble(), points[idx].value),
                             ),
                             isCurved: true,
-                            color: const Color(0xFFA72FB8),
+                            color: const Color(0xFFB84CFF),
                             barWidth: 3,
                             dotData: const FlDotData(show: false),
                             belowBarData: BarAreaData(
@@ -686,7 +886,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                               gradient: const LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [Color(0x66A72FB8), Color(0x00A72FB8)],
+                                colors: [Color(0x77B84CFF), Color(0x00B84CFF)],
                               ),
                             ),
                           ),
@@ -711,109 +911,141 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFECEAF1),
-        borderRadius: BorderRadius.circular(18),
+        color: _cardBg,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _cardBorder, width: 1),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Swap',
               style: TextStyle(
-                color: Color(0xFF221C2E),
+                color: _titleText,
                 fontWeight: FontWeight.w900,
-                fontSize: Styles.fsSectionTitle,
+                fontSize: 48 / 2,
               ),
             ),
             const Gap(12),
             _tokenRow(asset: inAsset, balance: inBalance),
-            const Gap(8),
+            const Gap(10),
             TextField(
               controller: _amountController,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               style: const TextStyle(
-                color: Color(0xFF241F31),
+                color: _titleText,
                 fontWeight: FontWeight.w800,
                 fontSize: Styles.fsCardTitle,
               ),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: _inputBg,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 14,
+                ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFFD3CEDF)),
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: const BorderSide(color: _inputBorder, width: 1.5),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFFD3CEDF)),
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: const BorderSide(color: _inputBorder, width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: const BorderSide(color: _accent, width: 2),
                 ),
                 hintText: '0.0',
-                hintStyle: const TextStyle(color: Color(0xFFA09BB1)),
+                hintStyle: const TextStyle(color: _mutedText),
                 suffixIcon: IconButton(
                   onPressed: () {
                     _amountController.text = _maxInputAmount(inBalance);
                   },
                   icon: const Icon(
-                    Icons.auto_fix_high,
-                    color: Color(0xFF7B39C8),
+                    Icons.auto_fix_high_rounded,
+                    color: _accent,
+                    size: 30,
                   ),
                 ),
               ),
             ),
-            const Gap(8),
-            Align(
-              alignment: Alignment.center,
-              child: IconButton(
-                onPressed: _flipPair,
-                icon: const Icon(
-                  Icons.swap_vert_circle_rounded,
-                  color: Color(0xFF7B39C8),
-                  size: 34,
+            const Gap(12),
+            Center(
+              child: GestureDetector(
+                onTap: _flipPair,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFA14DE8), Color(0xFF6E31C7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x66090514),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.swap_vert_rounded,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                 ),
               ),
             ),
+            const Gap(12),
             _tokenRow(asset: outAsset, balance: outBalance),
-            const Gap(8),
+            const Gap(10),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                color: _inputBg,
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Estimated Output',
                     style: TextStyle(
-                      color: Color(0xFF7E7892),
-                      fontWeight: FontWeight.w700,
-                      fontSize: Styles.fsSmall,
+                      color: _mutedText,
+                      fontWeight: FontWeight.w800,
+                      fontSize: Styles.fsBodyStrong,
                     ),
                   ),
-                  const Gap(2),
+                  const Gap(4),
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           _quotedOutDisplay,
                           style: const TextStyle(
-                            color: Color(0xFF241F31),
+                            color: _titleText,
                             fontWeight: FontWeight.w900,
-                            fontSize: Styles.fsCardTitle,
+                            fontSize: Styles.fsSectionTitle,
+                            height: 1.0,
                           ),
                         ),
                       ),
                       Text(
                         outAsset.symbol,
                         style: const TextStyle(
-                          color: Color(0xFF6A6482),
-                          fontWeight: FontWeight.w700,
+                          color: _bodyText,
+                          fontWeight: FontWeight.w800,
+                          fontSize: Styles.fsSectionTitle,
+                          height: 1.0,
                         ),
                       ),
                     ],
@@ -821,13 +1053,10 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                 ],
               ),
             ),
-            const Gap(10),
-            if (_isLoadingQuote)
-              const LinearProgressIndicator(
-                minHeight: 2,
-                color: Color(0xFF7B39C8),
-              ),
             const Gap(12),
+            if (_isLoadingQuote)
+              const LinearProgressIndicator(minHeight: 2, color: _accent),
+            const Gap(14),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -835,12 +1064,13 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                     ? (_isApproving ? null : _approveIfNeeded)
                     : (canSwap ? _executeSwap : null),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6D34C0),
-                  disabledBackgroundColor: const Color(0xFFC8C2D6),
+                  backgroundColor: const Color(0xFF7A3ED5),
+                  disabledBackgroundColor: const Color(0xFF5F4B84),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(24),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  elevation: 0,
                 ),
                 child: Text(
                   requiresApproval
@@ -855,7 +1085,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: Styles.fsBodyStrong,
+                    fontSize: 40 / 2,
                   ),
                 ),
               ),
@@ -867,36 +1097,55 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   }
 
   Widget _tokenRow({required _PoolAsset asset, required String balance}) {
+    final showBalance = ref.watch(
+      walletProvider.select((state) => state.showBalance),
+    );
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: _inputBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF49346F), width: 1),
       ),
       child: Row(
         children: [
-          _buildTokenAvatar(
+          TokenAvatar(
+            size: 42,
             iconUrl: asset.iconUrl,
             fallbackSeed: asset.symbol,
-            size: 30,
+            resolveFallbackIcon: true,
+            useDeterministicFallback: true,
+            imageFit: BoxFit.contain,
+            imagePadding: const EdgeInsets.all(4),
+            avatarBackgroundColor: Colors.white,
           ),
-          const Gap(8),
+          const Gap(10),
           Expanded(
             child: Text(
               asset.symbol,
               style: const TextStyle(
-                color: Color(0xFF241F31),
+                color: _titleText,
                 fontWeight: FontWeight.w900,
-                fontSize: Styles.fsBodyStrong,
+                fontSize: 44 / 2,
               ),
             ),
           ),
-          Text(
-            '${_formatCompactToken(balance)} ${asset.symbol}',
-            style: const TextStyle(
-              color: Color(0xFF6A6482),
-              fontWeight: FontWeight.w700,
+          SizedBox(
+            width: 150,
+            child: BlurableContent(
+              showContent: showBalance,
+              child: Text(
+                '${AmountUtils.formatCompactToken(balance)} ${asset.symbol}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: _bodyText,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
+              ),
             ),
           ),
         ],
@@ -1051,12 +1300,12 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   }
 
   String _maxInputAmount(String balance) {
-    final parsed = double.tryParse(balance) ?? 0;
+    final parsed = AmountUtils.parseNumeric(balance);
     if (parsed <= 0) return '0';
-    return parsed
-        .toStringAsFixed(parsed >= 10 ? 4 : 6)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
+    return AmountUtils.formatInputAmount(
+      parsed,
+      decimals: parsed >= 10 ? 4 : 6,
+    );
   }
 
   BigInt? _toRawFromBalance(String value, int decimals) {
@@ -1073,7 +1322,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     if (_chartMetric == _ChartMetric.price) {
       return value.toStringAsFixed(value < 1 ? 6 : 4);
     }
-    return _formatUsd(value);
+    return AmountUtils.formatShortUsd(value);
   }
 
   String _formatChartTime(int timestamp) {
@@ -1086,32 +1335,6 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       _ChartTimeframe.w1 => '${dt.month}/${dt.day}',
       _ChartTimeframe.m1 => '${dt.month}/${dt.day}',
     };
-  }
-
-  static String _formatUsd(double value) {
-    if (value >= 1000) {
-      return '\$${(value / 1000).toStringAsFixed(1)}K';
-    }
-    return '\$${value.toStringAsFixed(2)}';
-  }
-
-  static String _formatRate(double value) {
-    if (value <= 0 || !value.isFinite) return '0';
-    if (value < 1) return value.toStringAsFixed(6);
-    if (value < 100) return value.toStringAsFixed(4);
-    return value.toStringAsFixed(2);
-  }
-
-  static String _formatCompactToken(String value) {
-    final parsed = double.tryParse(value) ?? 0;
-    if (parsed == 0) return '0';
-    if (parsed >= 1000) {
-      return '${(parsed / 1000).toStringAsFixed(2)}K';
-    }
-    return parsed
-        .toStringAsFixed(parsed < 1 ? 6 : 4)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
   }
 
   static String _chartMetricLabel(_ChartMetric metric) => switch (metric) {
@@ -1128,99 +1351,116 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     _ChartTimeframe.m1 => '1M',
   };
 
-  static Widget _buildTokenAvatar({
-    required String? iconUrl,
-    required String fallbackSeed,
-    required double size,
-  }) {
-    final provider = _resolveImageProvider(iconUrl);
-    final svgData = _resolveSvgData(iconUrl);
-    final fallback = _buildDeterministicFallbackIcon(fallbackSeed, size);
-    return SizedBox(
-      width: size,
-      height: size,
-      child: svgData != null
-          ? ClipOval(
-              child: SvgPicture.string(
-                svgData,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-              ),
-            )
-          : provider == null
-          ? fallback
-          : ClipOval(
-              child: Image(
-                image: provider,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => fallback,
-              ),
-            ),
-    );
-  }
-
-  static Widget _buildDeterministicFallbackIcon(String seed, double size) {
-    final initial = seed.isEmpty ? '?' : seed.substring(0, 1).toUpperCase();
-    final bg = Color(0xFF000000 + (seed.hashCode.abs() % 0x00FFFFFF));
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-      alignment: Alignment.center,
-      child: Text(
-        initial,
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: math.max(10, size * 0.45),
-        ),
-      ),
-    );
-  }
-
-  static ImageProvider? _resolveImageProvider(String? iconUrl) {
-    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
-    final normalized = iconUrl.trim();
-    final dataUri = _tryParseDataUri(normalized);
-    if (dataUri != null) {
-      if (dataUri.mimeType.contains('svg')) return null;
-      final bytes = dataUri.contentAsBytes();
-      if (bytes.isNotEmpty) return MemoryImage(bytes);
-      return null;
-    }
-    final uri = Uri.tryParse(normalized);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return null;
-    }
-    return NetworkImage(normalized);
-  }
-
-  static String? _resolveSvgData(String? iconUrl) {
-    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
-    final data = _tryParseDataUri(iconUrl.trim());
-    if (data == null) return null;
-    if (!data.mimeType.contains('svg')) return null;
-    final bytes = data.contentAsBytes();
-    if (bytes.isEmpty) return null;
-    return utf8.decode(bytes, allowMalformed: true);
-  }
-
-  static UriData? _tryParseDataUri(String value) {
-    if (!value.startsWith('data:')) return null;
-    try {
-      return UriData.parse(value);
-    } catch (_) {
-      return null;
-    }
-  }
-
   static String _shortHash(String hash) {
-    final value = hash.trim();
-    if (value.length < 12) return value;
-    return '${value.substring(0, 6)}...${value.substring(value.length - 4)}';
+    return AddressUtils.shorten(hash);
+  }
+
+  Future<TransactionPreview> _buildApprovePreview({
+    required String ownerAddress,
+    required _PoolAsset inAsset,
+    required BigInt approvalAmount,
+  }) async {
+    final web3 = ref.read(web3ServiceProvider);
+    final chainId = await web3.getChainId();
+    final gasPriceWei = await web3.getGasPriceWei();
+    final gasLimit = web3.erc20ApproveGasLimit;
+    final feeWei = gasPriceWei * BigInt.from(gasLimit);
+
+    return TransactionPreview(
+      title: 'Approve Token',
+      methodName: 'approve(address,uint256)',
+      recipientAddress: DexConfig.routerAddress,
+      amountDisplay:
+          '${AmountUtils.formatInputAmount(AmountUtils.parseNumeric(_amountController.text), decimals: 6)} ${inAsset.symbol}',
+      networkName: _networkNameForChainId(chainId),
+      chainId: chainId,
+      contractAddress: inAsset.address,
+      gasLimit: gasLimit,
+      gasPriceWei: gasPriceWei,
+      estimatedFeeDisplay: _formatFeeDisplay(feeWei),
+      calldataHex: '0x095ea7b3…',
+      fields: <TransactionPreviewField>[
+        TransactionPreviewField(label: 'Owner', value: ownerAddress),
+        TransactionPreviewField(
+          label: 'Spender',
+          value: DexConfig.routerAddress,
+        ),
+        TransactionPreviewField(
+          label: 'Amount (raw)',
+          value: approvalAmount.toString(),
+        ),
+      ],
+    );
+  }
+
+  Future<TransactionPreview> _buildSwapPreview({
+    required String accountAddress,
+    required _PoolAsset inAsset,
+    required _PoolAsset outAsset,
+    required BigInt amountOutMin,
+    required BigInt deadline,
+    required List<String> path,
+  }) async {
+    final web3 = ref.read(web3ServiceProvider);
+    final chainId = await web3.getChainId();
+    final gasPriceWei = await web3.getGasPriceWei();
+    final gasLimit = web3.swapGasLimit;
+    final feeWei = gasPriceWei * BigInt.from(gasLimit);
+
+    final methodName = inAsset.isNative
+        ? 'swapExactETHForTokens'
+        : (outAsset.isNative
+              ? 'swapExactTokensForETH'
+              : 'swapExactTokensForTokens');
+    final calldata = inAsset.isNative
+        ? '0x7ff36ab5…'
+        : (outAsset.isNative ? '0x18cbafe5…' : '0x38ed1739…');
+
+    return TransactionPreview(
+      title: 'Swap Tokens',
+      methodName: '$methodName(...)',
+      recipientAddress: accountAddress,
+      amountDisplay:
+          '${_amountController.text.trim()} ${inAsset.symbol} -> $_quotedOutDisplay ${outAsset.symbol}',
+      networkName: _networkNameForChainId(chainId),
+      chainId: chainId,
+      contractAddress: DexConfig.routerAddress,
+      gasLimit: gasLimit,
+      gasPriceWei: gasPriceWei,
+      estimatedFeeDisplay: _formatFeeDisplay(feeWei),
+      calldataHex: calldata,
+      fields: <TransactionPreviewField>[
+        TransactionPreviewField(
+          label: 'Router',
+          value: DexConfig.routerAddress,
+        ),
+        TransactionPreviewField(
+          label: 'Amount In (raw)',
+          value: _inputRaw.toString(),
+        ),
+        TransactionPreviewField(
+          label: 'Amount Out Min (raw)',
+          value: amountOutMin.toString(),
+        ),
+        TransactionPreviewField(label: 'Path', value: path.join(' -> ')),
+        TransactionPreviewField(label: 'To', value: accountAddress),
+        TransactionPreviewField(label: 'Deadline', value: deadline.toString()),
+      ],
+    );
+  }
+
+  static String _networkNameForChainId(int chainId) {
+    if (chainId == DexConfig.defaultChainId) return 'Reef';
+    return switch (chainId) {
+      1 => 'Ethereum',
+      11155111 => 'Sepolia',
+      _ => 'Chain $chainId',
+    };
+  }
+
+  static String _formatFeeDisplay(BigInt feeWei) {
+    final fee = feeWei.toDouble() / 1000000000000000000;
+    return '${NumberFormat('0.########').format(fee)} REEF';
   }
 }
 

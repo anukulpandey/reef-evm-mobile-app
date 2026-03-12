@@ -8,16 +8,32 @@ import '../providers/settings_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/amount_utils.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_account_box.dart';
 import '../widgets/add_account_modal.dart';
+import '../widgets/wallet/account_action_dialogs.dart';
 import '../core/theme/styles.dart';
 
-class WalletScreen extends ConsumerWidget {
+enum _AvailableAccountsSortMode {
+  defaultOrder,
+  balanceHighToLow,
+  balanceLowToHigh,
+}
+
+class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WalletScreen> createState() => _WalletScreenState();
+}
+
+class _WalletScreenState extends ConsumerState<WalletScreen> {
+  _AvailableAccountsSortMode _availableSortMode =
+      _AvailableAccountsSortMode.defaultOrder;
+
+  @override
+  Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
     final l10n = AppLocalizations.of(context);
 
@@ -242,6 +258,7 @@ class WalletScreen extends ConsumerWidget {
           (entry) => entry.account.address.toLowerCase() != selectedAddress,
         )
         .toList();
+    final sortedAvailableEntries = _sortAvailableEntries(availableEntries);
 
     final widgets = <Widget>[];
 
@@ -261,17 +278,75 @@ class WalletScreen extends ConsumerWidget {
       );
     }
 
-    if (availableEntries.isNotEmpty) {
+    if (sortedAvailableEntries.isNotEmpty) {
       widgets.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-          child: Text(
-            l10n.availableAccounts,
-            style: const TextStyle(color: Color(0xFFCFC3E6), fontSize: 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.availableAccounts,
+                  style: const TextStyle(
+                    color: Color(0xFFCFC3E6),
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+              PopupMenuButton<_AvailableAccountsSortMode>(
+                tooltip: l10n.sortByBalance,
+                initialValue: _availableSortMode,
+                color: Colors.white,
+                icon: const Icon(
+                  Icons.sort_rounded,
+                  color: Color(0xFFCFC3E6),
+                  size: 24,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                onSelected: (mode) {
+                  if (_availableSortMode == mode) return;
+                  setState(() => _availableSortMode = mode);
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: _AvailableAccountsSortMode.defaultOrder,
+                    child: Text(
+                      l10n.defaultOrder,
+                      style: const TextStyle(
+                        color: Color(0xFF1F1F28),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _AvailableAccountsSortMode.balanceHighToLow,
+                    child: Text(
+                      l10n.balanceHighToLow,
+                      style: const TextStyle(
+                        color: Color(0xFF1F1F28),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _AvailableAccountsSortMode.balanceLowToHigh,
+                    child: Text(
+                      l10n.balanceLowToHigh,
+                      style: const TextStyle(
+                        color: Color(0xFF1F1F28),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       );
-      for (final entry in availableEntries) {
+      for (final entry in sortedAvailableEntries) {
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -291,6 +366,33 @@ class WalletScreen extends ConsumerWidget {
     return widgets;
   }
 
+  List<_StoredAccountEntry> _sortAvailableEntries(
+    List<_StoredAccountEntry> entries,
+  ) {
+    if (_availableSortMode == _AvailableAccountsSortMode.defaultOrder) {
+      return entries;
+    }
+
+    final sorted = List<_StoredAccountEntry>.from(entries);
+    sorted.sort((a, b) {
+      final aBalance = _tryParseBalanceValue(a.balance);
+      final bBalance = _tryParseBalanceValue(b.balance);
+      if (aBalance == null && bBalance == null) return 0;
+      if (aBalance == null) return 1;
+      if (bBalance == null) return -1;
+      if (_availableSortMode == _AvailableAccountsSortMode.balanceLowToHigh) {
+        return aBalance.compareTo(bBalance);
+      }
+      return bBalance.compareTo(aBalance);
+    });
+    return sorted;
+  }
+
+  static double? _tryParseBalanceValue(String raw) {
+    final parsed = AmountUtils.parseNumeric(raw, fallback: double.nan);
+    return parsed.isNaN ? null : parsed;
+  }
+
   Widget _buildAccountCard({
     required BuildContext context,
     required WidgetRef ref,
@@ -303,8 +405,9 @@ class WalletScreen extends ConsumerWidget {
     return AccountBox(
       address: entry.account.address,
       name: displayName,
-      balance: isSelected ? _formatReefBalance(state.balance) : '0.0',
+      balance: AmountUtils.formatReefBalance(entry.balance),
       selected: isSelected,
+      showBalance: state.showBalance,
       onSelected: () => _selectAccountAndMaybeGoHome(
         context: context,
         ref: ref,
@@ -314,12 +417,14 @@ class WalletScreen extends ConsumerWidget {
         context: context,
         ref: ref,
         account: entry.account,
+        currentName: displayName,
         action: action,
       ),
       selectedText: l10n.selected,
       addressPrefix: l10n.addressLabel,
       selectAccountText: l10n.selectAccount,
       copyEvmAddressText: l10n.copyEvmAddress,
+      renameAccountText: l10n.renameAccount,
       deleteText: l10n.deleteLabel,
       exportAccountText: l10n.exportAccount,
     );
@@ -343,14 +448,21 @@ class WalletScreen extends ConsumerWidget {
     }
 
     final entries = <_StoredAccountEntry>[];
+    final selectedAddress = state.activeAccount?.address.toLowerCase();
     for (final address in uniqueAddresses) {
       final account = await walletService.loadAccount(address);
       if (account == null) continue;
       final accountName = await walletService.getAccountName(account.address);
+      final normalizedAddress = account.address.toLowerCase();
+      final storedBalance = state.accountBalances[normalizedAddress];
+      final fallbackSelectedBalance = normalizedAddress == selectedAddress
+          ? state.balance
+          : '';
       entries.add(
         _StoredAccountEntry(
           account: account,
           name: (accountName ?? '<No Name>').trim(),
+          balance: storedBalance ?? fallbackSelectedBalance,
         ),
       );
     }
@@ -360,11 +472,11 @@ class WalletScreen extends ConsumerWidget {
         _StoredAccountEntry(
           account: state.activeAccount!,
           name: (state.accountName ?? '<No Name>').trim(),
+          balance: state.balance,
         ),
       );
     }
 
-    final selectedAddress = state.activeAccount?.address.toLowerCase();
     entries.sort((a, b) {
       final aSelected = a.account.address.toLowerCase() == selectedAddress;
       final bSelected = b.account.address.toLowerCase() == selectedAddress;
@@ -379,6 +491,7 @@ class WalletScreen extends ConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
     required Account account,
+    required String currentName,
     required AccountMenuAction action,
   }) async {
     final l10n = AppLocalizations.of(context);
@@ -408,31 +521,42 @@ class WalletScreen extends ConsumerWidget {
           ),
         );
         break;
-      case AccountMenuAction.delete:
-        final shouldDelete = await showDialog<bool>(
+      case AccountMenuAction.renameAccount:
+        final updatedName = await showRenameAccountDialog(
           context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: Text(l10n.deleteAccount),
-            content: Text(l10n.deleteAccountConfirm),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(l10n.cancel),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(l10n.deleteLabel),
-              ),
-            ],
+          l10n: l10n,
+          currentName: currentName,
+        );
+        if (updatedName == null) return;
+        await ref
+            .read(walletProvider.notifier)
+            .renameAccount(address: account.address, name: updatedName);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.accountRenamed),
+            duration: const Duration(seconds: 1),
           ),
         );
-        if (shouldDelete == true) {
+        break;
+      case AccountMenuAction.delete:
+        final shouldDelete = await showDeleteAccountConfirmation(
+          context: context,
+          l10n: l10n,
+        );
+        if (shouldDelete) {
           await ref
               .read(walletProvider.notifier)
               .deleteAccount(account.address);
         }
         break;
       case AccountMenuAction.exportAccount:
+        final canExport = await confirmExportWithPassword(
+          context: context,
+          l10n: l10n,
+          authService: ref.read(authServiceProvider),
+        );
+        if (!canExport) return;
         final exportValue = account.mnemonic.isNotEmpty
             ? account.mnemonic
             : account.privateKey;
@@ -462,26 +586,16 @@ class WalletScreen extends ConsumerWidget {
     if (!goHomeOnSwitch) return;
     ref.read(navigationTabProvider.notifier).goHome();
   }
-
-  static String _formatReefBalance(String raw) {
-    final parsed = double.tryParse(raw.trim().replaceAll(',', '')) ?? 0;
-    if (parsed <= 0) return '0.0';
-    if (parsed >= 1000) return parsed.toStringAsFixed(2);
-    if (parsed >= 1)
-      return parsed
-          .toStringAsFixed(3)
-          .replaceFirst(RegExp(r'0+$'), '')
-          .replaceFirst(RegExp(r'\.$'), '');
-    return parsed
-        .toStringAsFixed(6)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
-  }
 }
 
 class _StoredAccountEntry {
   final Account account;
   final String name;
+  final String balance;
 
-  const _StoredAccountEntry({required this.account, required this.name});
+  const _StoredAccountEntry({
+    required this.account,
+    required this.name,
+    required this.balance,
+  });
 }

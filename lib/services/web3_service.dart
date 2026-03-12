@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:web3dart/web3dart.dart';
 import 'package:http/http.dart';
 import '../models/account.dart';
-import 'dart:math' as math;
+import '../utils/amount_utils.dart';
 
 class Web3Service {
   late Web3Client _client;
@@ -24,6 +24,27 @@ class Web3Service {
 
   static const String _routerAbiJson =
       '[{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"}],"name":"getAmountsOut","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactETHForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForETH","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"}]';
+  static const String _routerLiquidityAbiJson =
+      '[{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"address","name":"tokenB","type":"address"},{"internalType":"uint256","name":"amountADesired","type":"uint256"},{"internalType":"uint256","name":"amountBDesired","type":"uint256"},{"internalType":"uint256","name":"amountAMin","type":"uint256"},{"internalType":"uint256","name":"amountBMin","type":"uint256"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"addLiquidity","outputs":[{"internalType":"uint256","name":"amountA","type":"uint256"},{"internalType":"uint256","name":"amountB","type":"uint256"},{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"amountTokenDesired","type":"uint256"},{"internalType":"uint256","name":"amountTokenMin","type":"uint256"},{"internalType":"uint256","name":"amountETHMin","type":"uint256"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"addLiquidityETH","outputs":[{"internalType":"uint256","name":"amountToken","type":"uint256"},{"internalType":"uint256","name":"amountETH","type":"uint256"},{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"payable","type":"function"}]';
+  static const String _factoryAbiJson =
+      '[{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"address","name":"tokenB","type":"address"}],"name":"getPair","outputs":[{"internalType":"address","name":"pair","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"address","name":"tokenB","type":"address"}],"name":"createPair","outputs":[{"internalType":"address","name":"pair","type":"address"}],"stateMutability":"nonpayable","type":"function"}]';
+  static const String _zeroAddress = '0x0000000000000000000000000000000000000000';
+
+  static const int _erc20TransferGasLimit = 350000;
+  static const int _erc20ApproveGasLimit = 450000;
+  static const int _swapGasLimit = 2500000;
+  static const int _nativeTransferGasLimit = 21000;
+  static const int _factoryCreatePairGasLimit = 800000;
+  static const int _addLiquidityGasLimit = 2800000;
+  static const int _addLiquidityEthGasLimit = 2600000;
+
+  int get nativeTransferGasLimit => _nativeTransferGasLimit;
+  int get erc20TransferGasLimit => _erc20TransferGasLimit;
+  int get erc20ApproveGasLimit => _erc20ApproveGasLimit;
+  int get swapGasLimit => _swapGasLimit;
+  int get createPairGasLimit => _factoryCreatePairGasLimit;
+  int get addLiquidityGasLimit => _addLiquidityGasLimit;
+  int get addLiquidityEthGasLimit => _addLiquidityEthGasLimit;
 
   Future<String> getBalance(String address) async {
     final rpcBalance = await _getBalanceViaRpc(address);
@@ -41,10 +62,10 @@ class Web3Service {
   }
 
   BigInt parseAmountToRaw(String amount, int decimals) =>
-      _parseAmountToRaw(amount, decimals);
+      AmountUtils.parseAmountToRaw(amount, decimals);
 
   String formatAmountFromRaw(BigInt raw, int decimals) =>
-      _formatTokenAmount(raw, decimals);
+      AmountUtils.formatAmountFromRaw(raw, decimals);
 
   Future<String?> _getBalanceViaRpc(String address) async {
     try {
@@ -72,7 +93,7 @@ class Web3Service {
       if (normalized.isEmpty) return '0';
       final raw = BigInt.tryParse(normalized, radix: 16);
       if (raw == null) return null;
-      return _formatTokenAmount(raw, 18);
+      return AmountUtils.formatAmountFromRaw(raw, 18);
     } catch (_) {
       return null;
     }
@@ -81,13 +102,14 @@ class Web3Service {
   Future<String> sendEth(Account account, String to, String amountStr) async {
     try {
       final credentials = EthPrivateKey.fromHex(account.privateKey);
-      final wei = _parseAmountToRaw(amountStr, 18);
+      final wei = AmountUtils.parseAmountToRaw(amountStr, 18);
       final chainId = await _resolveChainId();
       final txHash = await _client.sendTransaction(
         credentials,
         Transaction(
           to: EthereumAddress.fromHex(to),
           value: EtherAmount.inWei(wei),
+          maxGas: _nativeTransferGasLimit,
         ),
         chainId: chainId,
       );
@@ -116,7 +138,7 @@ class Web3Service {
         EthereumAddress.fromHex(tokenAddress),
       );
       final transfer = contract.function('transfer');
-      final amountRaw = _parseAmountToRaw(amountStr, decimals);
+      final amountRaw = AmountUtils.parseAmountToRaw(amountStr, decimals);
 
       final txHash = await _client.sendTransaction(
         credentials,
@@ -124,6 +146,7 @@ class Web3Service {
           contract: contract,
           function: transfer,
           parameters: <dynamic>[EthereumAddress.fromHex(to), amountRaw],
+          maxGas: _erc20TransferGasLimit,
         ),
         chainId: chainId,
       );
@@ -208,6 +231,7 @@ class Web3Service {
         contract: contract,
         function: approve,
         parameters: <dynamic>[EthereumAddress.fromHex(spender), amount],
+        maxGas: _erc20ApproveGasLimit,
       ),
       chainId: chainId,
     );
@@ -242,6 +266,7 @@ class Web3Service {
           deadline,
         ],
         value: EtherAmount.inWei(amountInWei),
+        maxGas: _swapGasLimit,
       ),
       chainId: chainId,
     );
@@ -276,6 +301,7 @@ class Web3Service {
           EthereumAddress.fromHex(to),
           deadline,
         ],
+        maxGas: _swapGasLimit,
       ),
       chainId: chainId,
     );
@@ -310,6 +336,141 @@ class Web3Service {
           EthereumAddress.fromHex(to),
           deadline,
         ],
+        maxGas: _swapGasLimit,
+      ),
+      chainId: chainId,
+    );
+  }
+
+  Future<String> getPairAddress({
+    required String factoryAddress,
+    required String tokenA,
+    required String tokenB,
+  }) async {
+    final factory = DeployedContract(
+      ContractAbi.fromJson(_factoryAbiJson, 'ReefswapFactory'),
+      EthereumAddress.fromHex(factoryAddress),
+    );
+    final getPair = factory.function('getPair');
+    final response = await _client.call(
+      contract: factory,
+      function: getPair,
+      params: <dynamic>[
+        EthereumAddress.fromHex(tokenA),
+        EthereumAddress.fromHex(tokenB),
+      ],
+    );
+    if (response.isEmpty) return _zeroAddress;
+    final value = response.first;
+    if (value is EthereumAddress) return value.hexEip55;
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    return _zeroAddress;
+  }
+
+  Future<String> createPair({
+    required Account account,
+    required String factoryAddress,
+    required String tokenA,
+    required String tokenB,
+  }) async {
+    final credentials = EthPrivateKey.fromHex(account.privateKey);
+    final chainId = await _resolveChainId();
+    final factory = DeployedContract(
+      ContractAbi.fromJson(_factoryAbiJson, 'ReefswapFactory'),
+      EthereumAddress.fromHex(factoryAddress),
+    );
+    final createPairFn = factory.function('createPair');
+
+    return _client.sendTransaction(
+      credentials,
+      Transaction.callContract(
+        contract: factory,
+        function: createPairFn,
+        parameters: <dynamic>[
+          EthereumAddress.fromHex(tokenA),
+          EthereumAddress.fromHex(tokenB),
+        ],
+        maxGas: _factoryCreatePairGasLimit,
+      ),
+      chainId: chainId,
+    );
+  }
+
+  Future<String> addLiquidity({
+    required Account account,
+    required String routerAddress,
+    required String tokenA,
+    required String tokenB,
+    required BigInt amountADesired,
+    required BigInt amountBDesired,
+    required BigInt amountAMin,
+    required BigInt amountBMin,
+    required String to,
+    required BigInt deadline,
+  }) async {
+    final credentials = EthPrivateKey.fromHex(account.privateKey);
+    final chainId = await _resolveChainId();
+    final router = DeployedContract(
+      ContractAbi.fromJson(_routerLiquidityAbiJson, 'ReefswapRouterLiquidity'),
+      EthereumAddress.fromHex(routerAddress),
+    );
+    final addLiquidityFn = router.function('addLiquidity');
+
+    return _client.sendTransaction(
+      credentials,
+      Transaction.callContract(
+        contract: router,
+        function: addLiquidityFn,
+        parameters: <dynamic>[
+          EthereumAddress.fromHex(tokenA),
+          EthereumAddress.fromHex(tokenB),
+          amountADesired,
+          amountBDesired,
+          amountAMin,
+          amountBMin,
+          EthereumAddress.fromHex(to),
+          deadline,
+        ],
+        maxGas: _addLiquidityGasLimit,
+      ),
+      chainId: chainId,
+    );
+  }
+
+  Future<String> addLiquidityEth({
+    required Account account,
+    required String routerAddress,
+    required String tokenAddress,
+    required BigInt amountTokenDesired,
+    required BigInt amountTokenMin,
+    required BigInt amountEthMin,
+    required String to,
+    required BigInt deadline,
+    required BigInt amountEthDesired,
+  }) async {
+    final credentials = EthPrivateKey.fromHex(account.privateKey);
+    final chainId = await _resolveChainId();
+    final router = DeployedContract(
+      ContractAbi.fromJson(_routerLiquidityAbiJson, 'ReefswapRouterLiquidity'),
+      EthereumAddress.fromHex(routerAddress),
+    );
+    final addLiquidityEthFn = router.function('addLiquidityETH');
+
+    return _client.sendTransaction(
+      credentials,
+      Transaction.callContract(
+        contract: router,
+        function: addLiquidityEthFn,
+        parameters: <dynamic>[
+          EthereumAddress.fromHex(tokenAddress),
+          amountTokenDesired,
+          amountTokenMin,
+          amountEthMin,
+          EthereumAddress.fromHex(to),
+          deadline,
+        ],
+        value: EtherAmount.inWei(amountEthDesired),
+        maxGas: _addLiquidityEthGasLimit,
       ),
       chainId: chainId,
     );
@@ -351,60 +512,11 @@ class Web3Service {
       }
 
       final BigInt balanceVal = balance.first as BigInt;
-      return _formatTokenAmount(balanceVal, decimalsVal);
+      return AmountUtils.formatAmountFromRaw(balanceVal, decimalsVal);
     } catch (e) {
       print("Error getting ERC20 balance: $e");
       return "0.0";
     }
-  }
-
-  static String _formatTokenAmount(BigInt raw, int decimals) {
-    if (raw == BigInt.zero) return "0";
-    if (decimals <= 0) return raw.toString();
-
-    final divisor = BigInt.from(10).pow(decimals);
-    final whole = raw ~/ divisor;
-    final fractionRaw = raw
-        .remainder(divisor)
-        .toString()
-        .padLeft(decimals, '0');
-
-    final precision = math.min(6, decimals);
-    var fraction = fractionRaw.substring(0, precision);
-    fraction = fraction.replaceFirst(RegExp(r'0+$'), '');
-    if (fraction.isEmpty) return whole.toString();
-    return '$whole.$fraction';
-  }
-
-  static BigInt _parseAmountToRaw(String amount, int decimals) {
-    final normalized = amount.trim().replaceAll(',', '');
-    if (normalized.isEmpty) {
-      throw Exception('Amount is empty');
-    }
-
-    final parts = normalized.split('.');
-    if (parts.length > 2) {
-      throw Exception('Invalid amount');
-    }
-
-    final whole = BigInt.tryParse(parts[0].isEmpty ? '0' : parts[0]);
-    if (whole == null) {
-      throw Exception('Invalid amount');
-    }
-
-    final fractionInput = parts.length == 2 ? parts[1] : '';
-    if (!RegExp(r'^\d*$').hasMatch(fractionInput)) {
-      throw Exception('Invalid amount');
-    }
-    final trimmedFraction = fractionInput.length > decimals
-        ? fractionInput.substring(0, decimals)
-        : fractionInput;
-    final paddedFraction = trimmedFraction.padRight(decimals, '0');
-    final fraction = paddedFraction.isEmpty
-        ? BigInt.zero
-        : BigInt.parse(paddedFraction);
-
-    return whole * BigInt.from(10).pow(decimals) + fraction;
   }
 
   Future<int> _resolveChainId() async {
@@ -442,5 +554,30 @@ class Web3Service {
       // Default Ethereum mainnet ID only as last fallback.
       return 1;
     }
+  }
+
+  Future<int> getChainId() => _resolveChainId();
+
+  Future<BigInt> getGasPriceWei() async {
+    try {
+      final gasPrice = await _client.getGasPrice();
+      return gasPrice.getInWei;
+    } catch (_) {
+      return BigInt.from(1000000000);
+    }
+  }
+
+  Future<void> waitForReceipt(
+    String txHash, {
+    Duration timeout = const Duration(minutes: 3),
+    Duration pollInterval = const Duration(seconds: 2),
+  }) async {
+    final started = DateTime.now();
+    while (DateTime.now().difference(started) < timeout) {
+      final receipt = await _client.getTransactionReceipt(txHash);
+      if (receipt != null) return;
+      await Future<void>.delayed(pollInterval);
+    }
+    throw Exception('Timed out waiting for transaction receipt');
   }
 }

@@ -1,15 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/account.dart';
 import '../models/token.dart';
 import '../services/web3_service.dart';
+import '../utils/amount_utils.dart';
+import '../utils/address_utils.dart';
 import '../utils/token_icon_resolver.dart';
+import '../constants/storage_keys.dart';
 import 'service_providers.dart';
 
 class WalletState {
   final Account? activeAccount;
   final String? accountName;
   final String balance;
+  final Map<String, String> accountBalances;
   final List<Token>? tokens;
   final bool isLoading;
   final String? error;
@@ -20,6 +25,7 @@ class WalletState {
     this.activeAccount,
     this.accountName,
     this.balance = '0.0',
+    this.accountBalances = const <String, String>{},
     this.tokens,
     this.isLoading = false,
     this.error,
@@ -31,6 +37,7 @@ class WalletState {
     Account? activeAccount,
     String? accountName,
     String? balance,
+    Map<String, String>? accountBalances,
     List<Token>? tokens,
     bool? isLoading,
     String? error,
@@ -41,6 +48,7 @@ class WalletState {
       activeAccount: activeAccount ?? this.activeAccount,
       accountName: accountName ?? this.accountName,
       balance: balance ?? this.balance,
+      accountBalances: accountBalances ?? this.accountBalances,
       tokens: tokens ?? this.tokens ?? const <Token>[],
       isLoading: isLoading ?? this.isLoading,
       error: error,
@@ -55,9 +63,8 @@ class WalletState {
     if (hasCustomName) return value;
 
     final address = activeAccount?.address ?? '';
-    if (address.length >= 10) {
-      return '${address.substring(0, 4)}...${address.substring(address.length - 4)}';
-    }
+    if (address.length >= 10)
+      return AddressUtils.shorten(address, prefixLength: 4);
     return value.isEmpty ? '<No Name>' : value;
   }
 
@@ -78,9 +85,23 @@ class WalletNotifier extends Notifier<WalletState> {
     });
 
     // Trigger async load after first frame or using microtask to avoid circularity
-    Future.microtask(() => _loadFirstAccount());
+    Future.microtask(() async {
+      await _loadDisplayBalancePreference();
+      await _loadFirstAccount();
+    });
 
     return initialState;
+  }
+
+  Future<void> _loadDisplayBalancePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool(StorageKeys.displayBalance);
+    final value = stored ?? true;
+    if (stored == null) {
+      await prefs.setBool(StorageKeys.displayBalance, value);
+    }
+    if (state.showBalance == value) return;
+    state = state.copyWith(showBalance: value, error: state.error);
   }
 
   Future<void> _loadFirstAccount() async {
@@ -176,7 +197,7 @@ class WalletNotifier extends Notifier<WalletState> {
                     symbol: 'REEF',
                   ),
                   usdPrice: reefUsd,
-                  usdValue: _safeDouble(balance) * reefUsd,
+                  usdValue: AmountUtils.parseNumeric(balance) * reefUsd,
                 ),
                 ...erc20Tokens,
               ]
@@ -187,7 +208,7 @@ class WalletNotifier extends Notifier<WalletState> {
                   tokenUsdByAddress: tokenUsd,
                 ),
               )
-              .where((token) => _hasPositiveBalance(token.balance))
+              .where((token) => AmountUtils.hasPositiveBalance(token.balance))
               .toList();
 
       final totalUsd = allTokens.fold<double>(
@@ -195,8 +216,14 @@ class WalletNotifier extends Notifier<WalletState> {
         (sum, token) => sum + (token.usdValue ?? 0),
       );
 
+      final normalizedActiveAddress = accountAddress.trim().toLowerCase();
+      final updatedAccountBalances = Map<String, String>.from(
+        state.accountBalances,
+      )..[normalizedActiveAddress] = balance;
+
       state = state.copyWith(
         balance: balance,
+        accountBalances: updatedAccountBalances,
         tokens: allTokens,
         portfolioUsd: totalUsd,
         error: null,
@@ -204,7 +231,64 @@ class WalletNotifier extends Notifier<WalletState> {
     } catch (e) {
       print('Error refreshing portfolio: $e');
       state = state.copyWith(error: e.toString());
+    } finally {
+      // Keep non-selected account balances fresh for wallet list cards.
+      unawaited(refreshAllAccountBalances(includeActive: false));
     }
+  }
+
+  Future<void> refreshAllAccountBalances({bool includeActive = true}) async {
+    final walletService = ref.read(walletServiceProvider);
+    final web3Service = ref.read(web3ServiceProvider);
+    final explorerService = ref.read(explorerServiceProvider);
+
+    final addresses = await walletService.getAccounts();
+    if (addresses.isEmpty) return;
+
+    final normalizedActive = state.activeAccount?.address.toLowerCase();
+    final uniqueAddresses = <String>[];
+    final seen = <String>{};
+    for (final raw in addresses) {
+      final address = raw.trim();
+      final normalized = address.toLowerCase();
+      if (address.isEmpty || seen.contains(normalized)) continue;
+      seen.add(normalized);
+      uniqueAddresses.add(address);
+    }
+
+    if (!includeActive && uniqueAddresses.length <= 1) return;
+
+    final fetched = await Future.wait(
+      uniqueAddresses.map((address) async {
+        final normalized = address.toLowerCase();
+        if (!includeActive && normalizedActive == normalized) {
+          return MapEntry(normalized, state.balance);
+        }
+        try {
+          final rpcFuture = web3Service.getBalance(address);
+          final explorerFuture = explorerService.fetchNativeBalanceForAddress(
+            address,
+          );
+          final rpcBalance = await rpcFuture;
+          final explorerBalance = await explorerFuture;
+          return MapEntry(
+            normalized,
+            _pickBestNativeBalance(
+              rpcBalance: rpcBalance,
+              explorerBalance: explorerBalance,
+            ),
+          );
+        } catch (_) {
+          return MapEntry(normalized, state.accountBalances[normalized] ?? '0');
+        }
+      }),
+    );
+
+    final nextBalances = Map<String, String>.from(state.accountBalances);
+    for (final entry in fetched) {
+      nextBalances[entry.key] = entry.value;
+    }
+    state = state.copyWith(accountBalances: nextBalances, error: state.error);
   }
 
   void _ensureAutoRefresh() {
@@ -233,7 +317,7 @@ class WalletNotifier extends Notifier<WalletState> {
           token.address,
           decimalsHint: token.decimals,
         );
-        final effectiveBalance = _hasPositiveBalance(chainBalance)
+        final effectiveBalance = AmountUtils.hasPositiveBalance(chainBalance)
             ? chainBalance
             : token.balance;
         return Token(
@@ -248,35 +332,22 @@ class WalletNotifier extends Notifier<WalletState> {
     );
 
     hydrated.sort((a, b) {
-      final aVal = double.tryParse(a.balance) ?? 0;
-      final bVal = double.tryParse(b.balance) ?? 0;
+      final aVal = AmountUtils.parseNumeric(a.balance);
+      final bVal = AmountUtils.parseNumeric(b.balance);
       if (aVal != bVal) return bVal.compareTo(aVal);
       return a.symbol.compareTo(b.symbol);
     });
     return hydrated
-        .where((token) => _hasPositiveBalance(token.balance))
+        .where((token) => AmountUtils.hasPositiveBalance(token.balance))
         .toList();
-  }
-
-  static bool _hasPositiveBalance(String value) {
-    final normalized = value.trim().replaceAll(',', '');
-    if (normalized.isEmpty) return false;
-    final parsed = double.tryParse(normalized);
-    if (parsed == null) return false;
-    return parsed > 0;
-  }
-
-  static double _safeDouble(String value) {
-    final normalized = value.trim().replaceAll(',', '');
-    return double.tryParse(normalized) ?? 0;
   }
 
   static String _pickBestNativeBalance({
     required String rpcBalance,
     required String? explorerBalance,
   }) {
-    final rpc = _safeDouble(rpcBalance);
-    final explorer = _safeDouble(explorerBalance ?? '0');
+    final rpc = AmountUtils.parseNumeric(rpcBalance);
+    final explorer = AmountUtils.parseNumeric(explorerBalance ?? '0');
 
     if (explorer > 0 && rpc <= 0) return explorerBalance!;
     if (rpc > 0 && explorer <= 0) return rpcBalance;
@@ -297,12 +368,19 @@ class WalletNotifier extends Notifier<WalletState> {
     final usdPrice = isReefLike
         ? reefUsd
         : (tokenUsdByAddress[token.address.toLowerCase()] ?? 0);
-    final usdValue = _safeDouble(token.balance) * usdPrice;
+    final usdValue = AmountUtils.parseNumeric(token.balance) * usdPrice;
     return token.copyWith(usdPrice: usdPrice, usdValue: usdValue);
   }
 
   void toggleBalanceVisibility() {
-    state = state.copyWith(showBalance: !state.showBalance);
+    final nextValue = !state.showBalance;
+    state = state.copyWith(showBalance: nextValue, error: state.error);
+    unawaited(_persistDisplayBalance(nextValue));
+  }
+
+  Future<void> _persistDisplayBalance(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(StorageKeys.displayBalance, value);
   }
 
   Future<Account?> createAccount() async {
@@ -379,6 +457,29 @@ class WalletNotifier extends Notifier<WalletState> {
       await walletService.saveAccountName(activeAddress, value);
     }
     state = state.copyWith(accountName: value);
+  }
+
+  Future<void> renameAccount({
+    required String address,
+    required String name,
+  }) async {
+    final normalizedAddress = address.trim();
+    if (normalizedAddress.isEmpty) return;
+
+    final value = name.trim().isEmpty ? '<No Name>' : name.trim();
+    final walletService = ref.read(walletServiceProvider);
+    await walletService.saveAccountName(normalizedAddress, value);
+
+    final isActive =
+        state.activeAccount?.address.toLowerCase() ==
+        normalizedAddress.toLowerCase();
+    if (isActive) {
+      state = state.copyWith(accountName: value, error: null);
+      return;
+    }
+
+    // Trigger rebuild so account list UI can refresh names from storage.
+    state = state.copyWith(error: null);
   }
 
   Future<void> selectAccount(String address) async {
@@ -460,14 +561,6 @@ class WalletNotifier extends Notifier<WalletState> {
     final account = state.activeAccount;
     if (account == null) {
       throw Exception('No active account selected');
-    }
-
-    final authService = ref.read(authServiceProvider);
-    final authorized = await authService.authenticateForTransaction(
-      localizedReason: 'Authenticate to send this transaction',
-    );
-    if (!authorized) {
-      throw Exception('Biometric authentication failed');
     }
 
     final web3Service = ref.read(web3ServiceProvider);

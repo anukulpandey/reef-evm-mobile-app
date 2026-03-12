@@ -1,15 +1,16 @@
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/storage_keys.dart';
 
 class AuthService {
   final LocalAuthentication auth = LocalAuthentication();
-  static const String _appPasswordKey = 'app_password';
 
   Future<bool> authenticate() async {
     final prefs = await SharedPreferences.getInstance();
-    final bool useBiometrics = prefs.getBool('use_biometrics') ?? false;
+    final bool useBiometrics =
+        prefs.getBool(StorageKeys.useBiometrics) ?? false;
     final hasPassword =
-        (prefs.getString(_appPasswordKey)?.trim() ?? '').isNotEmpty;
+        (prefs.getString(StorageKeys.appPassword)?.trim() ?? '').isNotEmpty;
 
     if (!useBiometrics) {
       return !hasPassword;
@@ -40,7 +41,8 @@ class AuthService {
     String localizedReason = 'Authenticate to confirm this transaction',
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final bool useBiometrics = prefs.getBool('use_biometrics') ?? false;
+    final bool useBiometrics =
+        prefs.getBool(StorageKeys.useBiometrics) ?? false;
 
     if (!useBiometrics) {
       return true;
@@ -70,28 +72,28 @@ class AuthService {
 
   Future<void> setBiometricsEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('use_biometrics', enabled);
+    await prefs.setBool(StorageKeys.useBiometrics, enabled);
   }
 
   Future<bool> isBiometricsEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('use_biometrics') ?? false;
+    return prefs.getBool(StorageKeys.useBiometrics) ?? false;
   }
 
   Future<void> setAppPassword(String password) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_appPasswordKey, password);
+    await prefs.setString(StorageKeys.appPassword, password);
   }
 
   Future<bool> hasAppPassword() async {
     final prefs = await SharedPreferences.getInstance();
-    final password = prefs.getString(_appPasswordKey)?.trim() ?? '';
+    final password = prefs.getString(StorageKeys.appPassword)?.trim() ?? '';
     return password.isNotEmpty;
   }
 
   Future<bool> verifyAppPassword(String input) async {
     final prefs = await SharedPreferences.getInstance();
-    final password = prefs.getString(_appPasswordKey)?.trim() ?? '';
+    final password = prefs.getString(StorageKeys.appPassword)?.trim() ?? '';
     if (password.isEmpty) return true;
     return input.trim() == password;
   }

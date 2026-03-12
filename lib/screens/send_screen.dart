@@ -1,20 +1,28 @@
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
+import '../core/config/dex_config.dart';
 import '../core/theme/styles.dart';
 import '../l10n/app_localizations.dart';
 import '../models/token.dart';
+import '../models/transaction_preview.dart';
 import '../providers/service_providers.dart';
 import '../providers/wallet_provider.dart';
-import '../utils/token_icon_resolver.dart';
+import '../utils/address_utils.dart';
+import '../utils/address_validator.dart';
+import '../utils/amount_utils.dart';
+import '../widgets/blurable_content.dart';
+import '../widgets/common/token_avatar.dart';
+import '../widgets/send/send_amount_slider.dart';
+import '../widgets/send/send_transaction_status_card.dart';
+import 'transaction_confirmation_screen.dart';
 
 enum SendFlowStatus {
   noAddress,
@@ -59,12 +67,18 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         symbol == 'WREEF';
   }
 
-  double get _tokenBalance =>
-      double.tryParse(widget.token.balance.replaceAll(',', '')) ?? 0;
+  double get _tokenBalance => AmountUtils.parseNumeric(widget.token.balance);
 
   double get _maxTransferAmount {
     final reserveForFee = _isNativeToken ? 3.0 : 0.0;
     return math.max(0, _tokenBalance - reserveForFee);
+  }
+
+  int get _maxFractionDigits {
+    final decimals = widget.token.decimals;
+    if (decimals <= 0) return 0;
+    if (decimals > 18) return 18;
+    return decimals;
   }
 
   @override
@@ -91,22 +105,19 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     super.dispose();
   }
 
-  bool _isValidEvmAddress(String value) {
-    return RegExp(r'^0x[a-fA-F0-9]{40}$').hasMatch(value);
-  }
-
   Future<void> _revalidate() async {
     final address = _recipientController.text.trim();
     final amountText = _amountController.text.trim();
-    final amount = double.tryParse(amountText) ?? 0;
-    final validAddress = _isValidEvmAddress(address);
+    final amount = AmountUtils.parseNumeric(amountText);
+    final hasAmountFormatIssue = _hasAmountFormatIssue(amountText);
+    final validAddress = AddressValidator.isValidEvmAddress(address);
 
     SendFlowStatus next;
     if (address.isEmpty) {
       next = SendFlowStatus.noAddress;
     } else if (!validAddress) {
       next = SendFlowStatus.addressInvalid;
-    } else if (amountText.isEmpty || amount <= 0) {
+    } else if (amountText.isEmpty || amount <= 0 || hasAmountFormatIssue) {
       next = SendFlowStatus.noAmount;
     } else if (amount > _maxTransferAmount) {
       next = SendFlowStatus.amountTooHigh;
@@ -129,10 +140,73 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   String _sliderAmount(double rating) {
     final raw = _maxTransferAmount * rating;
     if (raw <= 0) return '';
-    return raw
-        .toStringAsFixed(6)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
+    return AmountUtils.formatInputAmount(raw, decimals: 6);
+  }
+
+  bool _hasAmountFormatIssue(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return false;
+    if (text == '.') return true;
+    final dotCount = '.'.allMatches(text).length;
+    if (dotCount > 1) return true;
+    final match = RegExp(r'^\d+(\.\d+)?$').hasMatch(text);
+    if (!match) return true;
+    if (!text.contains('.')) return false;
+    final fraction = text.split('.').last;
+    return fraction.length > _maxFractionDigits;
+  }
+
+  String? _amountValidationMessage() {
+    final text = _amountController.text.trim();
+    if (text.isEmpty) return null;
+    if (text == '.') return 'Invalid amount format';
+
+    final dotCount = '.'.allMatches(text).length;
+    if (dotCount > 1) return 'Invalid amount format';
+
+    final numeric = AmountUtils.parseNumeric(text, fallback: double.nan);
+    if (numeric.isNaN) return 'Invalid amount format';
+
+    if (text.contains('.')) {
+      final fraction = text.split('.').last;
+      if (fraction.length > _maxFractionDigits) {
+        return 'Maximum $_maxFractionDigits decimal places allowed';
+      }
+    }
+
+    if (numeric <= 0) return 'Amount must be greater than 0';
+    if (numeric > _maxTransferAmount) return 'Amount exceeds available balance';
+    return null;
+  }
+
+  List<TextInputFormatter> _amountInputFormatters() {
+    return <TextInputFormatter>[
+      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+      TextInputFormatter.withFunction((oldValue, newValue) {
+        final text = newValue.text;
+        if (text.isEmpty) return newValue;
+
+        if (text == '.') {
+          return const TextEditingValue(
+            text: '0.',
+            selection: TextSelection.collapsed(offset: 2),
+          );
+        }
+
+        final dotCount = '.'.allMatches(text).length;
+        if (dotCount > 1) return oldValue;
+
+        final regex = RegExp(r'^\d+(\.\d*)?$');
+        if (!regex.hasMatch(text)) return oldValue;
+
+        if (text.contains('.')) {
+          final fraction = text.split('.').last;
+          if (fraction.length > _maxFractionDigits) return oldValue;
+        }
+
+        return newValue;
+      }),
+    ];
   }
 
   Future<void> _fillAddressFromClipboard() async {
@@ -227,7 +301,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                     builder: (context, snapshot) {
                       final label = (snapshot.data ?? '').trim();
                       final display = label.isEmpty
-                          ? _shortAddress(account)
+                          ? AddressUtils.shorten(account)
                           : label;
                       return ListTile(
                         onTap: () => Navigator.of(context).pop(account),
@@ -243,7 +317,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                           ),
                         ),
                         subtitle: Text(
-                          _shortAddress(account),
+                          AddressUtils.shorten(account),
                           style: const TextStyle(color: Styles.textLightColor),
                         ),
                       );
@@ -263,37 +337,75 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   }
 
   Future<void> _onConfirmSend() async {
-    final l10n = AppLocalizations.of(context);
     if (_status != SendFlowStatus.ready || _isSubmitting) return;
 
     final to = _recipientController.text.trim();
     final amount = _amountController.text.trim();
+    final walletState = ref.read(walletProvider);
+    final from = walletState.activeAccount?.address;
+    if (from == null || from.trim().isEmpty) {
+      setState(() => _errorMessage = 'No active account selected');
+      return;
+    }
+
+    final preview = await _buildSendPreview(
+      fromAddress: from,
+      recipientAddress: to,
+      amountText: amount,
+    );
+    if (!mounted) return;
+
+    final result = await Navigator.of(context).push<TransactionApprovalResult>(
+      MaterialPageRoute(
+        builder: (_) => TransactionConfirmationScreen(
+          preview: preview,
+          approveButtonText: 'Approve & Send',
+          rejectButtonText: 'Reject',
+          onApprove: () async {
+            if (mounted) {
+              setState(() {
+                _isSubmitting = true;
+                _status = SendFlowStatus.sending;
+                _errorMessage = null;
+              });
+            }
+            try {
+              return await ref
+                  .read(walletProvider.notifier)
+                  .transferToken(token: widget.token, to: to, amount: amount);
+            } finally {
+              if (mounted) {
+                setState(() => _isSubmitting = false);
+              }
+            }
+          },
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (result == null || !result.approved) {
+      setState(() {
+        _status = SendFlowStatus.ready;
+        _errorMessage = null;
+      });
+      return;
+    }
+
+    if ((result.txHash ?? '').trim().isNotEmpty) {
+      setState(() {
+        _txHash = result.txHash;
+        _status = SendFlowStatus.sentToNetwork;
+        _errorMessage = null;
+      });
+      return;
+    }
 
     setState(() {
-      _isSubmitting = true;
-      _errorMessage = null;
-      _status = SendFlowStatus.sending;
+      _status = SendFlowStatus.error;
+      _errorMessage = 'Transaction failed';
     });
-
-    try {
-      final hash = await ref
-          .read(walletProvider.notifier)
-          .transferToken(token: widget.token, to: to, amount: amount);
-      if (!mounted) return;
-      setState(() {
-        _txHash = hash;
-        _isSubmitting = false;
-        _status = SendFlowStatus.sentToNetwork;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _errorMessage = '${l10n.transferFailed}: $e';
-        _status = SendFlowStatus.error;
-      });
-      await _revalidate();
-    }
+    await _revalidate();
   }
 
   @override
@@ -339,7 +451,19 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                     children: [
                       ..._buildInputElements(),
                       const Gap(36),
-                      ..._buildSliderWidgets(),
+                      SendAmountSlider(
+                        value: _rating,
+                        enabled: !_isSubmitting,
+                        onChanged: (newRating) {
+                          final amountText = _sliderAmount(newRating);
+                          _amountController.text = amountText;
+                          _amountController.selection = TextSelection.collapsed(
+                            offset: _amountController.text.length,
+                          );
+                          setState(() => _rating = newRating);
+                          _revalidate();
+                        },
+                      ),
                       const Gap(36),
                       _buildSendStatusButton(),
                     ],
@@ -353,6 +477,9 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
   List<Widget> _buildInputElements() {
     final l10n = AppLocalizations.of(context);
+    final showBalance = ref.watch(
+      walletProvider.select((state) => state.showBalance),
+    );
     return [
       Container(
         width: double.infinity,
@@ -453,7 +580,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 ),
                 const Gap(5),
                 Text(
-                  _shortAddress(_recipientController.text.trim()),
+                  AddressUtils.shorten(_recipientController.text.trim()),
                   style: const TextStyle(
                     color: Styles.textLightColor,
                     fontSize: 12,
@@ -489,7 +616,12 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           children: [
             Row(
               children: [
-                _buildTokenIcon(widget.token, 48),
+                TokenAvatar(
+                  size: 48,
+                  iconUrl: widget.token.iconUrl,
+                  fallbackSeed: widget.token.symbol,
+                  resolveFallbackIcon: true,
+                ),
                 const Gap(13),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -504,11 +636,14 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                             : Styles.darkBackgroundColor,
                       ),
                     ),
-                    Text(
-                      '${_formatAmount(_tokenBalance)} ${widget.token.symbol.toUpperCase()}',
-                      style: const TextStyle(
-                        color: Styles.textLightColor,
-                        fontSize: 12,
+                    BlurableContent(
+                      showContent: showBalance,
+                      child: Text(
+                        '${AmountUtils.formatInputAmount(_tokenBalance)} ${widget.token.symbol.toUpperCase()}',
+                        style: const TextStyle(
+                          color: Styles.textLightColor,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -519,12 +654,12 @@ class _SendScreenState extends ConsumerState<SendScreen> {
               child: TextFormField(
                 focusNode: _amountFocus,
                 readOnly: _isSubmitting,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
-                ],
+                inputFormatters: _amountInputFormatters(),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
+                  signed: false,
                 ),
+                textInputAction: TextInputAction.done,
                 controller: _amountController,
                 onChanged: (_) => _revalidate(),
                 style: TextStyle(
@@ -556,77 +691,20 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           ],
         ),
       ),
-    ];
-  }
-
-  List<Widget> _buildSliderWidgets() {
-    return [
-      SliderTheme(
-        data: SliderThemeData(
-          showValueIndicator: ShowValueIndicator.never,
-          overlayShape: SliderComponentShape.noOverlay,
-          valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
-          valueIndicatorColor: Styles.secondaryAccentColorDark,
-          thumbColor: Styles.secondaryAccentColorDark,
-          inactiveTickMarkColor: const Color(0xffc0b8dc),
-          trackShape: const _GradientRectSliderTrackShape(
-            gradient: Styles.buttonGradient,
-            darkenInactive: true,
+      if (_amountValidationMessage() != null) ...[
+        const Gap(8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            _amountValidationMessage()!,
+            style: const TextStyle(
+              color: Styles.errorColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
           ),
-          activeTickMarkColor: const Color(0xffffffff),
-          tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 4),
-          thumbShape: const _ThumbShape(),
         ),
-        child: Slider(
-          value: _rating,
-          onChanged: _isSubmitting
-              ? null
-              : (newRating) {
-                  final amountText = _sliderAmount(newRating);
-                  _amountController.text = amountText;
-                  _amountController.selection = TextSelection.collapsed(
-                    offset: _amountController.text.length,
-                  );
-                  setState(() => _rating = newRating);
-                  _revalidate();
-                },
-          inactiveColor: Colors.white24,
-          divisions: 100,
-          label: '${(_rating * 100).toInt()}%',
-        ),
-      ),
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '0%',
-              style: TextStyle(
-                color: Styles.textLightColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-            Text(
-              '50%',
-              style: TextStyle(
-                color: Styles.textLightColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-            Text(
-              '100%',
-              style: TextStyle(
-                color: Styles.textLightColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
+      ],
     ];
   }
 
@@ -651,7 +729,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                         : Colors.transparent,
                     padding: const EdgeInsets.all(0),
                   ),
-                  onPressed: _isSubmitting ? null : _onConfirmSend,
+                  onPressed: _onConfirmSend,
                   child: Ink(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
@@ -666,7 +744,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                     child: Center(
                       child: Text(
                         _sendButtonLabel(l10n),
-                        style: TextStyle(
+                        style: GoogleFonts.poppins(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: !isReady
@@ -727,319 +805,89 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   }
 
   Widget? _buildFeedbackUI(BuildContext context) {
-    if (_status != SendFlowStatus.sentToNetwork || _txHash == null) return null;
+    final isSending = _status == SendFlowStatus.sending;
+    final isSentToNetwork = _status == SendFlowStatus.sentToNetwork;
+    if (!isSending && !isSentToNetwork) return null;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: Theme.of(
-            context,
-          ).colorScheme.copyWith(primary: Styles.primaryAccentColor),
-        ),
-        child: Stepper(
-          currentStep: 1,
-          controlsBuilder: (context, details) {
-            return Padding(
-              padding: const EdgeInsets.only(top: 20),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    shadowColor: const Color(0x559d6cff),
-                    elevation: 5,
-                    backgroundColor: Styles.primaryAccentColor,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 16,
-                      horizontal: 32,
-                    ),
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Styles.whiteColor,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-          steps: [
-            Step(
-              isActive: true,
-              state: StepState.complete,
-              title: const Text('Sending transaction'),
-              content: Text(
-                'Sending transaction to network...',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-              ),
-            ),
-            Step(
-              isActive: true,
-              state: StepState.complete,
-              title: const Text('Sent to network'),
-              content: SelectableText(
-                _txHash!,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTokenIcon(Token token, double size) {
-    final iconUrl =
-        token.iconUrl ??
-        TokenIconResolver.resolveTokenIconUrl(
-          address: token.address,
-          symbol: token.symbol,
+    return SendTransactionStatusCard(
+      isSending: isSending,
+      isSentToNetwork: isSentToNetwork,
+      txHash: _txHash,
+      onContinue: () => Navigator.of(context).pop(),
+      onCopyHash: () async {
+        final hash = _txHash?.trim();
+        if (hash == null || hash.isEmpty) return;
+        await Clipboard.setData(ClipboardData(text: hash));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transaction hash copied')),
         );
-
-    final imageProvider = _resolveImageProvider(iconUrl);
-    final svgData = _resolveSvgData(iconUrl);
-
-    if (svgData != null) {
-      return ClipOval(
-        child: SvgPicture.string(
-          svgData,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-        ),
-      );
-    }
-
-    if (imageProvider != null) {
-      return ClipOval(
-        child: Image(
-          image: imageProvider,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.circle, color: Styles.primaryColor, size: 14),
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: const Icon(Icons.circle, color: Styles.primaryColor, size: 14),
+      },
     );
   }
 
-  static ImageProvider? _resolveImageProvider(String? iconUrl) {
-    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
-    final normalized = iconUrl.trim();
-    final dataUri = _tryParseDataUri(normalized);
-    if (dataUri != null) {
-      if (dataUri.mimeType.contains('svg')) return null;
-      final bytes = dataUri.contentAsBytes();
-      if (bytes.isEmpty) return null;
-      return MemoryImage(bytes);
-    }
+  Future<TransactionPreview> _buildSendPreview({
+    required String fromAddress,
+    required String recipientAddress,
+    required String amountText,
+  }) async {
+    final web3 = ref.read(web3ServiceProvider);
+    final isNative = _isNativeToken;
+    final chainId = await web3.getChainId();
+    final gasPriceWei = await web3.getGasPriceWei();
+    final gasLimit = isNative
+        ? web3.nativeTransferGasLimit
+        : web3.erc20TransferGasLimit;
+    final feeWei = gasPriceWei * BigInt.from(gasLimit);
+    final amountRaw = web3.parseAmountToRaw(amountText, widget.token.decimals);
 
-    final uri = Uri.tryParse(normalized);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return null;
-    }
-
-    return NetworkImage(normalized);
-  }
-
-  static String? _resolveSvgData(String? iconUrl) {
-    if (iconUrl == null || iconUrl.trim().isEmpty) return null;
-    final uriData = _tryParseDataUri(iconUrl.trim());
-    if (uriData == null || !uriData.mimeType.contains('svg')) return null;
-    final bytes = uriData.contentAsBytes();
-    if (bytes.isEmpty) return null;
-    return utf8.decode(bytes, allowMalformed: true);
-  }
-
-  static UriData? _tryParseDataUri(String value) {
-    if (!value.startsWith('data:')) return null;
-    try {
-      return UriData.parse(value);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static String _shortAddress(String value) {
-    if (value.length < 10) return value;
-    return '${value.substring(0, 6)}...${value.substring(value.length - 4)}';
-  }
-
-  static String _formatAmount(double value) {
-    return value
-        .toStringAsFixed(4)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
-  }
-}
-
-class _GradientRectSliderTrackShape extends SliderTrackShape
-    with BaseSliderTrackShape {
-  final LinearGradient gradient;
-  final bool darkenInactive;
-
-  const _GradientRectSliderTrackShape({
-    this.gradient = const LinearGradient(
-      colors: [Colors.lightBlue, Colors.blue],
-    ),
-    this.darkenInactive = true,
-  });
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset offset, {
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required Animation<double> enableAnimation,
-    required Offset thumbCenter,
-    Offset? secondaryOffset,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-    required TextDirection textDirection,
-  }) {
-    if (sliderTheme.trackHeight == null || sliderTheme.trackHeight! <= 0) {
-      return;
-    }
-
-    final trackRect = getPreferredRect(
-      parentBox: parentBox,
-      offset: offset,
-      sliderTheme: sliderTheme,
-      isEnabled: isEnabled,
-      isDiscrete: isDiscrete,
-    );
-
-    final activeTrackColorTween = ColorTween(
-      begin: sliderTheme.disabledActiveTrackColor,
-      end: sliderTheme.activeTrackColor,
-    );
-    final inactiveTrackColorTween = darkenInactive
-        ? ColorTween(
-            begin: sliderTheme.disabledInactiveTrackColor,
-            end: sliderTheme.inactiveTrackColor,
-          )
-        : activeTrackColorTween;
-
-    final activePaint = Paint()
-      ..shader = gradient.createShader(trackRect)
-      ..color =
-          activeTrackColorTween.evaluate(enableAnimation) ?? Colors.transparent;
-    final inactivePaint = Paint()
-      ..shader = gradient.createShader(trackRect)
-      ..color =
-          inactiveTrackColorTween.evaluate(enableAnimation) ??
-          Colors.transparent;
-
-    final leftTrackPaint = textDirection == TextDirection.ltr
-        ? activePaint
-        : inactivePaint;
-    final rightTrackPaint = textDirection == TextDirection.ltr
-        ? inactivePaint
-        : activePaint;
-
-    final trackRadius = Radius.circular(trackRect.height / 2);
-    final activeTrackRadius = Radius.circular(trackRect.height / 2 + 1);
-
-    context.canvas.drawRRect(
-      RRect.fromLTRBAndCorners(
-        trackRect.left,
-        trackRect.top,
-        thumbCenter.dx,
-        trackRect.bottom,
-        topLeft: textDirection == TextDirection.ltr
-            ? activeTrackRadius
-            : trackRadius,
-        bottomLeft: textDirection == TextDirection.ltr
-            ? activeTrackRadius
-            : trackRadius,
+    final networkName = _networkNameForChainId(chainId);
+    final fields = <TransactionPreviewField>[
+      TransactionPreviewField(label: 'From', value: fromAddress),
+      TransactionPreviewField(label: 'To', value: recipientAddress),
+      TransactionPreviewField(
+        label: 'Amount (raw)',
+        value: amountRaw.toString(),
       ),
-      leftTrackPaint,
-    );
+    ];
 
-    context.canvas.drawRRect(
-      RRect.fromLTRBAndCorners(
-        thumbCenter.dx,
-        trackRect.top,
-        trackRect.right,
-        trackRect.bottom,
-        topRight: textDirection == TextDirection.rtl
-            ? activeTrackRadius
-            : trackRadius,
-        bottomRight: textDirection == TextDirection.rtl
-            ? activeTrackRadius
-            : trackRadius,
-      ),
-      rightTrackPaint,
+    if (!isNative) {
+      fields.addAll(<TransactionPreviewField>[
+        TransactionPreviewField(label: 'Token', value: widget.token.symbol),
+        TransactionPreviewField(
+          label: 'Decimals',
+          value: '${widget.token.decimals}',
+        ),
+      ]);
+    }
+
+    return TransactionPreview(
+      title: 'Send Transaction',
+      methodName: isNative ? 'nativeTransfer' : 'transfer(address,uint256)',
+      recipientAddress: recipientAddress,
+      amountDisplay: '$amountText ${widget.token.symbol.toUpperCase()}',
+      networkName: networkName,
+      chainId: chainId,
+      contractAddress: isNative ? null : widget.token.address,
+      gasLimit: gasLimit,
+      gasPriceWei: gasPriceWei,
+      estimatedFeeDisplay: _formatFeeDisplay(feeWei),
+      fields: fields,
+      calldataHex: isNative ? null : '0xa9059cbb…',
     );
   }
-}
 
-class _ThumbShape extends RoundSliderThumbShape {
-  final _indicatorShape = const PaddleSliderValueIndicatorShape();
+  static String _networkNameForChainId(int chainId) {
+    if (chainId == DexConfig.defaultChainId) return 'Reef';
+    return switch (chainId) {
+      1 => 'Ethereum',
+      11155111 => 'Sepolia',
+      _ => 'Chain $chainId',
+    };
+  }
 
-  const _ThumbShape();
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
-    required Animation<double> activationAnimation,
-    required Animation<double> enableAnimation,
-    required bool isDiscrete,
-    required TextPainter labelPainter,
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required TextDirection textDirection,
-    required double value,
-    required double textScaleFactor,
-    required Size sizeWithOverflow,
-  }) {
-    super.paint(
-      context,
-      center,
-      activationAnimation: activationAnimation,
-      enableAnimation: enableAnimation,
-      sliderTheme: sliderTheme,
-      value: value,
-      textScaleFactor: textScaleFactor,
-      sizeWithOverflow: sizeWithOverflow,
-      isDiscrete: isDiscrete,
-      labelPainter: labelPainter,
-      parentBox: parentBox,
-      textDirection: textDirection,
-    );
-
-    _indicatorShape.paint(
-      context,
-      center,
-      activationAnimation: const AlwaysStoppedAnimation(1),
-      enableAnimation: enableAnimation,
-      labelPainter: labelPainter,
-      parentBox: parentBox,
-      sliderTheme: sliderTheme,
-      value: value,
-      textScaleFactor: 0.8,
-      sizeWithOverflow: sizeWithOverflow,
-      isDiscrete: isDiscrete,
-      textDirection: textDirection,
-    );
+  static String _formatFeeDisplay(BigInt feeWei) {
+    final fee = feeWei.toDouble() / 1000000000000000000;
+    return '${NumberFormat('0.########').format(fee)} REEF';
   }
 }
