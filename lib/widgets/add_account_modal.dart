@@ -82,6 +82,13 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
           icon: Icons.restore,
           onTap: _isCreating ? null : () => _showImportPhraseDialog(context),
         ),
+        _buildOptionTile(
+          title: l10n.importPrivateKey,
+          icon: Icons.vpn_key_rounded,
+          onTap: _isCreating
+              ? null
+              : () => _showImportPrivateKeyDialog(context),
+        ),
         if (_errorText != null) ...[
           const Gap(12),
           Text(
@@ -399,12 +406,34 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
                   child: ElevatedButton(
                     onPressed: canAdd
                         ? () async {
-                            await ref
+                            final enteredName = _accountNameController.text
+                                .trim();
+                            if (enteredName.isEmpty) {
+                              setState(() {
+                                _detailsErrorText = 'Account name is required.';
+                              });
+                              return;
+                            }
+
+                            final saved = await ref
                                 .read(walletProvider.notifier)
-                                .setAccountName(_accountNameController.text);
-                            setState(() {
-                              _detailsErrorText = null;
-                            });
+                                .saveCreatedAccount(
+                                  draftAccount: account,
+                                  name: enteredName,
+                                );
+                            if (!saved) {
+                              if (!mounted) return;
+                              final providerError = ref
+                                  .read(walletProvider)
+                                  .error;
+                              setState(() {
+                                _detailsErrorText =
+                                    providerError ??
+                                    'Failed to save account. Please try again.';
+                              });
+                              return;
+                            }
+                            setState(() => _detailsErrorText = null);
                             if (!context.mounted) return;
                             Navigator.of(context).pop();
                           }
@@ -625,50 +654,153 @@ class _AddAccountModalState extends ConsumerState<AddAccountModal> {
 
   void _showImportPhraseDialog(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final controller = TextEditingController();
+    _showImportDialog(
+      context: context,
+      title: l10n.importFromPhrase,
+      hintText: l10n.enterMnemonicPhrase,
+      maxLines: 3,
+      onImport: (value, accountName) => ref
+          .read(walletProvider.notifier)
+          .importMnemonic(value, accountName: accountName),
+    );
+  }
+
+  void _showImportPrivateKeyDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    _showImportDialog(
+      context: context,
+      title: l10n.importFromPrivateKey,
+      hintText: l10n.enterPrivateKey,
+      maxLines: 2,
+      onImport: (value, accountName) => ref
+          .read(walletProvider.notifier)
+          .importPrivateKey(value, accountName: accountName),
+    );
+  }
+
+  void _showImportDialog({
+    required BuildContext context,
+    required String title,
+    required String hintText,
+    required int maxLines,
+    required Future<void> Function(String value, String accountName) onImport,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final valueController = TextEditingController();
+    final nameController = TextEditingController();
     showDialog(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: Styles.whiteColor,
-          title: Text(
-            l10n.importFromPhrase,
-            style: const TextStyle(color: Styles.primaryColor),
-          ),
-          content: TextField(
-            controller: controller,
-            maxLines: 3,
-            style: const TextStyle(color: Styles.textColor),
-            decoration: InputDecoration(
-              hintText: l10n.enterMnemonicPhrase,
-              border: OutlineInputBorder(),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: Styles.purpleColor),
+        String? dialogErrorText;
+        bool isSubmitting = false;
+
+        return StatefulBuilder(
+          builder: (localContext, setState) {
+            Future<void> submit() async {
+              final value = valueController.text.trim();
+              final accountName = nameController.text.trim();
+              if (value.isEmpty || accountName.isEmpty) {
+                setState(() {
+                  dialogErrorText =
+                      'Account name and import value are required.';
+                });
+                return;
+              }
+
+              setState(() {
+                isSubmitting = true;
+                dialogErrorText = null;
+              });
+              await onImport(value, accountName);
+              if (!mounted || !dialogContext.mounted) return;
+
+              final providerError = ref.read(walletProvider).error?.trim();
+              if (providerError != null && providerError.isNotEmpty) {
+                setState(() {
+                  isSubmitting = false;
+                  dialogErrorText = providerError;
+                });
+                return;
+              }
+
+              Navigator.pop(dialogContext);
+              Navigator.of(context).pop();
+            }
+
+            return AlertDialog(
+              backgroundColor: Styles.whiteColor,
+              title: Text(
+                title,
+                style: const TextStyle(color: Styles.primaryColor),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.cancel),
-            ),
-            TextButton(
-              onPressed: () async {
-                final phrase = controller.text.trim();
-                Navigator.pop(dialogContext);
-                if (phrase.isNotEmpty) {
-                  await ref
-                      .read(walletProvider.notifier)
-                      .importMnemonic(phrase);
-                  if (mounted) Navigator.of(context).pop();
-                }
-              },
-              child: Text(l10n.importLabel),
-            ),
-          ],
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    maxLines: 1,
+                    enabled: !isSubmitting,
+                    style: const TextStyle(color: Styles.textColor),
+                    decoration: InputDecoration(
+                      labelText: l10n.accountNameLabel,
+                      border: const OutlineInputBorder(),
+                      focusedBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: Styles.purpleColor),
+                      ),
+                    ),
+                  ),
+                  const Gap(10),
+                  TextField(
+                    controller: valueController,
+                    maxLines: maxLines,
+                    enabled: !isSubmitting,
+                    style: const TextStyle(color: Styles.textColor),
+                    decoration: InputDecoration(
+                      hintText: hintText,
+                      border: const OutlineInputBorder(),
+                      focusedBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: Styles.purpleColor),
+                      ),
+                    ),
+                  ),
+                  if (dialogErrorText != null) ...[
+                    const Gap(10),
+                    Text(
+                      dialogErrorText!,
+                      style: const TextStyle(
+                        color: Styles.errorColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+                  child: Text(l10n.cancel),
+                ),
+                TextButton(
+                  onPressed: isSubmitting ? null : submit,
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(l10n.importLabel),
+                ),
+              ],
+            );
+          },
         );
       },
-    );
+    ).whenComplete(() {
+      valueController.dispose();
+      nameController.dispose();
+    });
   }
 
   Future<void> _copyText(

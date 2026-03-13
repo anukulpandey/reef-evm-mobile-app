@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
 import '../../core/theme/styles.dart';
+import '../../core/theme/reef_theme_colors.dart';
 import '../../models/pool.dart';
 import '../common/token_avatar.dart';
 
@@ -21,6 +22,7 @@ class PoolListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     final token0Symbol = _displaySymbol(pool.token0Symbol);
     final token1Symbol = _displaySymbol(pool.token1Symbol);
     final ticker =
@@ -36,9 +38,9 @@ class PoolListCard extends StatelessWidget {
         onTap: onTap,
         child: Ink(
           decoration: BoxDecoration(
-            color: const Color(0xFFF2EFF9),
+            color: colors.cardBackground,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFD9D1EA)),
+            border: Border.all(color: colors.borderColor),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x140E0A1A),
@@ -81,10 +83,10 @@ class PoolListCard extends StatelessWidget {
                         '$token0Symbol - $token1Symbol',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: Styles.fsCardTitle,
-                          color: Styles.textColor,
+                          color: colors.textPrimary,
                         ),
                       ),
                       const Gap(2),
@@ -92,8 +94,8 @@ class PoolListCard extends StatelessWidget {
                         '$tvlLabel : ${pool.tvl}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF3E394C),
+                        style: TextStyle(
+                          color: colors.textSecondary,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
@@ -106,8 +108,8 @@ class PoolListCard extends StatelessWidget {
                           children: [
                             TextSpan(
                               text: '$volume24hLabel : ${pool.volume24h} ',
-                              style: const TextStyle(
-                                color: Color(0xFF3E394C),
+                              style: TextStyle(
+                                color: colors.textSecondary,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -138,8 +140,8 @@ class PoolListCard extends StatelessWidget {
                       ticker,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF4A455B),
+                      style: TextStyle(
+                        color: colors.textMuted,
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.4,
@@ -150,12 +152,12 @@ class PoolListCard extends StatelessWidget {
                       width: 26,
                       height: 26,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE9E3F3),
+                        color: colors.cardBackgroundSecondary,
                         borderRadius: BorderRadius.circular(13),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.chevron_right_rounded,
-                        color: Color(0xFF9089A5),
+                        color: colors.textMuted,
                         size: 20,
                       ),
                     ),

@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:web3dart/web3dart.dart';
+import 'package:web3dart/json_rpc.dart';
+import 'package:web3dart/crypto.dart' show bytesToHex;
 import 'package:http/http.dart';
+import '../core/config/dex_config.dart';
 import '../models/account.dart';
 import '../utils/amount_utils.dart';
+import '../utils/transaction_error_mapper.dart';
 
 class Web3Service {
   late Web3Client _client;
@@ -21,6 +26,12 @@ class Web3Service {
 
   static const String _erc20AllowanceAbiJson =
       '[{"constant":true,"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"spender","type":"address"},{"name":"value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}]';
+  static const String _erc20TransferAbiJson =
+      '[{"constant":false,"inputs":[{"name":"to","type":"address"},{"name":"value","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"}]';
+  static const String _wrappedNativeAbiJson =
+      '[{"inputs":[],"name":"deposit","outputs":[],"stateMutability":"payable","type":"function"}]';
+  static const String _pairAbiJson =
+      '[{"inputs":[{"internalType":"address","name":"to","type":"address"}],"name":"mint","outputs":[{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"nonpayable","type":"function"}]';
 
   static const String _routerAbiJson =
       '[{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"}],"name":"getAmountsOut","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactETHForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForETH","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"}]';
@@ -28,7 +39,8 @@ class Web3Service {
       '[{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"address","name":"tokenB","type":"address"},{"internalType":"uint256","name":"amountADesired","type":"uint256"},{"internalType":"uint256","name":"amountBDesired","type":"uint256"},{"internalType":"uint256","name":"amountAMin","type":"uint256"},{"internalType":"uint256","name":"amountBMin","type":"uint256"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"addLiquidity","outputs":[{"internalType":"uint256","name":"amountA","type":"uint256"},{"internalType":"uint256","name":"amountB","type":"uint256"},{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"amountTokenDesired","type":"uint256"},{"internalType":"uint256","name":"amountTokenMin","type":"uint256"},{"internalType":"uint256","name":"amountETHMin","type":"uint256"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"addLiquidityETH","outputs":[{"internalType":"uint256","name":"amountToken","type":"uint256"},{"internalType":"uint256","name":"amountETH","type":"uint256"},{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"payable","type":"function"}]';
   static const String _factoryAbiJson =
       '[{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"address","name":"tokenB","type":"address"}],"name":"getPair","outputs":[{"internalType":"address","name":"pair","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"address","name":"tokenB","type":"address"}],"name":"createPair","outputs":[{"internalType":"address","name":"pair","type":"address"}],"stateMutability":"nonpayable","type":"function"}]';
-  static const String _zeroAddress = '0x0000000000000000000000000000000000000000';
+  static const String _zeroAddress =
+      '0x0000000000000000000000000000000000000000';
 
   static const int _erc20TransferGasLimit = 350000;
   static const int _erc20ApproveGasLimit = 450000;
@@ -37,6 +49,8 @@ class Web3Service {
   static const int _factoryCreatePairGasLimit = 800000;
   static const int _addLiquidityGasLimit = 2800000;
   static const int _addLiquidityEthGasLimit = 2600000;
+  static const int _wrapNativeGasLimit = 350000;
+  static const int _pairMintGasLimit = 900000;
 
   int get nativeTransferGasLimit => _nativeTransferGasLimit;
   int get erc20TransferGasLimit => _erc20TransferGasLimit;
@@ -45,6 +59,8 @@ class Web3Service {
   int get createPairGasLimit => _factoryCreatePairGasLimit;
   int get addLiquidityGasLimit => _addLiquidityGasLimit;
   int get addLiquidityEthGasLimit => _addLiquidityEthGasLimit;
+  int get wrapNativeGasLimit => _wrapNativeGasLimit;
+  int get pairMintGasLimit => _pairMintGasLimit;
 
   Future<String> getBalance(String address) async {
     final rpcBalance = await _getBalanceViaRpc(address);
@@ -100,24 +116,19 @@ class Web3Service {
   }
 
   Future<String> sendEth(Account account, String to, String amountStr) async {
-    try {
-      final credentials = EthPrivateKey.fromHex(account.privateKey);
-      final wei = AmountUtils.parseAmountToRaw(amountStr, 18);
-      final chainId = await _resolveChainId();
-      final txHash = await _client.sendTransaction(
-        credentials,
-        Transaction(
-          to: EthereumAddress.fromHex(to),
-          value: EtherAmount.inWei(wei),
-          maxGas: _nativeTransferGasLimit,
-        ),
-        chainId: chainId,
-      );
-      return txHash;
-    } catch (e) {
-      print("Error sending eth: $e");
-      rethrow;
-    }
+    final wei = AmountUtils.parseAmountToRaw(amountStr, 18);
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
+    final tx = Transaction(
+      to: toAddress,
+      value: EtherAmount.inWei(wei),
+      maxGas: _nativeTransferGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'native_transfer',
+      debugExtras: <String, dynamic>{'to': to, 'amount': amountStr},
+    );
   }
 
   Future<String> sendErc20({
@@ -127,34 +138,31 @@ class Web3Service {
     required String amountStr,
     required int decimals,
   }) async {
-    try {
-      final credentials = EthPrivateKey.fromHex(account.privateKey);
-      final chainId = await _resolveChainId();
-      final contract = DeployedContract(
-        ContractAbi.fromJson(
-          '[{"constant":false,"inputs":[{"name":"to","type":"address"},{"name":"value","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}]',
-          'ERC20',
-        ),
-        EthereumAddress.fromHex(tokenAddress),
-      );
-      final transfer = contract.function('transfer');
-      final amountRaw = AmountUtils.parseAmountToRaw(amountStr, decimals);
+    final contract = DeployedContract(
+      ContractAbi.fromJson(_erc20TransferAbiJson, 'ERC20'),
+      _parseAddressOrThrow(tokenAddress, field: 'token'),
+    );
+    final transfer = contract.function('transfer');
+    final amountRaw = AmountUtils.parseAmountToRaw(amountStr, decimals);
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
 
-      final txHash = await _client.sendTransaction(
-        credentials,
-        Transaction.callContract(
-          contract: contract,
-          function: transfer,
-          parameters: <dynamic>[EthereumAddress.fromHex(to), amountRaw],
-          maxGas: _erc20TransferGasLimit,
-        ),
-        chainId: chainId,
-      );
-      return txHash;
-    } catch (e) {
-      print("Error sending ERC20: $e");
-      rethrow;
-    }
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: transfer,
+      parameters: <dynamic>[toAddress, amountRaw],
+      maxGas: _erc20TransferGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'erc20_transfer',
+      debugExtras: <String, dynamic>{
+        'tokenAddress': tokenAddress,
+        'to': to,
+        'amount': amountStr,
+        'amountRaw': amountRaw.toString(),
+      },
+    );
   }
 
   Future<BigInt> getAmountsOut({
@@ -217,23 +225,28 @@ class Web3Service {
     required String spender,
     required BigInt amount,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final token = _parseAddressOrThrow(tokenAddress, field: 'token');
+    final spenderAddress = _parseAddressOrThrow(spender, field: 'spender');
     final contract = DeployedContract(
       ContractAbi.fromJson(_erc20AllowanceAbiJson, 'ERC20Allowance'),
-      EthereumAddress.fromHex(tokenAddress),
+      token,
     );
     final approve = contract.function('approve');
-
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: contract,
-        function: approve,
-        parameters: <dynamic>[EthereumAddress.fromHex(spender), amount],
-        maxGas: _erc20ApproveGasLimit,
-      ),
-      chainId: chainId,
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: approve,
+      parameters: <dynamic>[spenderAddress, amount],
+      maxGas: _erc20ApproveGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'erc20_approve',
+      debugExtras: <String, dynamic>{
+        'tokenAddress': tokenAddress,
+        'spender': spender,
+        'amount': amount.toString(),
+      },
     );
   }
 
@@ -246,29 +259,35 @@ class Web3Service {
     required String to,
     required BigInt deadline,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final router = _parseAddressOrThrow(routerAddress, field: 'router');
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
+    final parsedPath = path
+        .map((entry) => _parseAddressOrThrow(entry, field: 'path token'))
+        .toList();
     final contract = DeployedContract(
       ContractAbi.fromJson(_routerAbiJson, 'ReefswapRouter'),
-      EthereumAddress.fromHex(routerAddress),
+      router,
     );
     final swap = contract.function('swapExactETHForTokens');
-
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: contract,
-        function: swap,
-        parameters: <dynamic>[
-          amountOutMin,
-          path.map(EthereumAddress.fromHex).toList(),
-          EthereumAddress.fromHex(to),
-          deadline,
-        ],
-        value: EtherAmount.inWei(amountInWei),
-        maxGas: _swapGasLimit,
-      ),
-      chainId: chainId,
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: swap,
+      parameters: <dynamic>[amountOutMin, parsedPath, toAddress, deadline],
+      value: EtherAmount.inWei(amountInWei),
+      maxGas: _swapGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'swap_exact_eth_for_tokens',
+      debugExtras: <String, dynamic>{
+        'routerAddress': routerAddress,
+        'amountInWei': amountInWei.toString(),
+        'amountOutMin': amountOutMin.toString(),
+        'path': path,
+        'to': to,
+        'deadline': deadline.toString(),
+      },
     );
   }
 
@@ -281,29 +300,40 @@ class Web3Service {
     required String to,
     required BigInt deadline,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final router = _parseAddressOrThrow(routerAddress, field: 'router');
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
+    final parsedPath = path
+        .map((entry) => _parseAddressOrThrow(entry, field: 'path token'))
+        .toList();
     final contract = DeployedContract(
       ContractAbi.fromJson(_routerAbiJson, 'ReefswapRouter'),
-      EthereumAddress.fromHex(routerAddress),
+      router,
     );
     final swap = contract.function('swapExactTokensForETH');
-
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: contract,
-        function: swap,
-        parameters: <dynamic>[
-          amountIn,
-          amountOutMin,
-          path.map(EthereumAddress.fromHex).toList(),
-          EthereumAddress.fromHex(to),
-          deadline,
-        ],
-        maxGas: _swapGasLimit,
-      ),
-      chainId: chainId,
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: swap,
+      parameters: <dynamic>[
+        amountIn,
+        amountOutMin,
+        parsedPath,
+        toAddress,
+        deadline,
+      ],
+      maxGas: _swapGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'swap_exact_tokens_for_eth',
+      debugExtras: <String, dynamic>{
+        'routerAddress': routerAddress,
+        'amountIn': amountIn.toString(),
+        'amountOutMin': amountOutMin.toString(),
+        'path': path,
+        'to': to,
+        'deadline': deadline.toString(),
+      },
     );
   }
 
@@ -316,29 +346,40 @@ class Web3Service {
     required String to,
     required BigInt deadline,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final router = _parseAddressOrThrow(routerAddress, field: 'router');
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
+    final parsedPath = path
+        .map((entry) => _parseAddressOrThrow(entry, field: 'path token'))
+        .toList();
     final contract = DeployedContract(
       ContractAbi.fromJson(_routerAbiJson, 'ReefswapRouter'),
-      EthereumAddress.fromHex(routerAddress),
+      router,
     );
     final swap = contract.function('swapExactTokensForTokens');
-
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: contract,
-        function: swap,
-        parameters: <dynamic>[
-          amountIn,
-          amountOutMin,
-          path.map(EthereumAddress.fromHex).toList(),
-          EthereumAddress.fromHex(to),
-          deadline,
-        ],
-        maxGas: _swapGasLimit,
-      ),
-      chainId: chainId,
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: swap,
+      parameters: <dynamic>[
+        amountIn,
+        amountOutMin,
+        parsedPath,
+        toAddress,
+        deadline,
+      ],
+      maxGas: _swapGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'swap_exact_tokens_for_tokens',
+      debugExtras: <String, dynamic>{
+        'routerAddress': routerAddress,
+        'amountIn': amountIn.toString(),
+        'amountOutMin': amountOutMin.toString(),
+        'path': path,
+        'to': to,
+        'deadline': deadline.toString(),
+      },
     );
   }
 
@@ -367,32 +408,124 @@ class Web3Service {
     return _zeroAddress;
   }
 
+  Future<bool> hasContractCode(String address) async {
+    try {
+      final response = await _httpClient
+          .post(
+            Uri.parse(_rpcUrl),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'eth_getCode',
+              'params': [address, 'latest'],
+              'id': 1,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) return false;
+      final result = payload['result'];
+      if (result is! String) return false;
+      final normalized = result.trim().toLowerCase();
+      return normalized.isNotEmpty && normalized != '0x';
+    } catch (e) {
+      print('[rpc][eth_getCode_error] address=$address error=$e');
+      return false;
+    }
+  }
+
   Future<String> createPair({
     required Account account,
     required String factoryAddress,
     required String tokenA,
     required String tokenB,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final factoryAddressParsed = _parseAddressOrThrow(
+      factoryAddress,
+      field: 'factory',
+    );
+    final tokenAAddress = _parseAddressOrThrow(tokenA, field: 'token A');
+    final tokenBAddress = _parseAddressOrThrow(tokenB, field: 'token B');
     final factory = DeployedContract(
       ContractAbi.fromJson(_factoryAbiJson, 'ReefswapFactory'),
-      EthereumAddress.fromHex(factoryAddress),
+      factoryAddressParsed,
     );
     final createPairFn = factory.function('createPair');
+    final tx = Transaction.callContract(
+      contract: factory,
+      function: createPairFn,
+      parameters: <dynamic>[tokenAAddress, tokenBAddress],
+      maxGas: _factoryCreatePairGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'create_pair',
+      debugExtras: <String, dynamic>{
+        'factoryAddress': factoryAddress,
+        'tokenA': tokenA,
+        'tokenB': tokenB,
+      },
+    );
+  }
 
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: factory,
-        function: createPairFn,
-        parameters: <dynamic>[
-          EthereumAddress.fromHex(tokenA),
-          EthereumAddress.fromHex(tokenB),
-        ],
-        maxGas: _factoryCreatePairGasLimit,
-      ),
-      chainId: chainId,
+  Future<BigInt> getErc20BalanceRaw({
+    required String tokenAddress,
+    required String owner,
+  }) async {
+    try {
+      final contract = DeployedContract(
+        ContractAbi.fromJson(_erc20TransferAbiJson, 'ERC20Balance'),
+        _parseAddressOrThrow(tokenAddress, field: 'token'),
+      );
+      final balanceOf = contract.function('balanceOf');
+      final response = await _client.call(
+        contract: contract,
+        function: balanceOf,
+        params: <dynamic>[_parseAddressOrThrow(owner, field: 'owner')],
+      );
+      if (response.isEmpty || response.first is! BigInt) return BigInt.zero;
+      return response.first as BigInt;
+    } catch (e) {
+      print(
+        '[erc20][balance_raw_error] token=$tokenAddress owner=$owner error=$e',
+      );
+      return BigInt.zero;
+    }
+  }
+
+  Future<String> wrapNative({
+    required Account account,
+    required String wrappedTokenAddress,
+    required BigInt amountWei,
+  }) async {
+    final wrappedAddress = _parseAddressOrThrow(
+      wrappedTokenAddress,
+      field: 'wrapped token',
+    );
+    final contract = DeployedContract(
+      ContractAbi.fromJson(_wrappedNativeAbiJson, 'WrappedNative'),
+      wrappedAddress,
+    );
+    final deposit = contract.function('deposit');
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: deposit,
+      parameters: const <dynamic>[],
+      value: EtherAmount.inWei(amountWei),
+      maxGas: _wrapNativeGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'wrap_native',
+      debugExtras: <String, dynamic>{
+        'wrappedTokenAddress': wrappedTokenAddress,
+        'amountWei': amountWei.toString(),
+      },
     );
   }
 
@@ -408,32 +541,104 @@ class Web3Service {
     required String to,
     required BigInt deadline,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final routerAddressParsed = _parseAddressOrThrow(
+      routerAddress,
+      field: 'router',
+    );
+    final tokenAAddress = _parseAddressOrThrow(tokenA, field: 'token A');
+    final tokenBAddress = _parseAddressOrThrow(tokenB, field: 'token B');
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
     final router = DeployedContract(
       ContractAbi.fromJson(_routerLiquidityAbiJson, 'ReefswapRouterLiquidity'),
-      EthereumAddress.fromHex(routerAddress),
+      routerAddressParsed,
     );
     final addLiquidityFn = router.function('addLiquidity');
+    final tx = Transaction.callContract(
+      contract: router,
+      function: addLiquidityFn,
+      parameters: <dynamic>[
+        tokenAAddress,
+        tokenBAddress,
+        amountADesired,
+        amountBDesired,
+        amountAMin,
+        amountBMin,
+        toAddress,
+        deadline,
+      ],
+      maxGas: _addLiquidityGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'add_liquidity',
+      debugExtras: <String, dynamic>{
+        'routerAddress': routerAddress,
+        'tokenA': tokenA,
+        'tokenB': tokenB,
+        'amountADesired': amountADesired.toString(),
+        'amountBDesired': amountBDesired.toString(),
+        'amountAMin': amountAMin.toString(),
+        'amountBMin': amountBMin.toString(),
+        'to': to,
+        'deadline': deadline.toString(),
+      },
+    );
+  }
 
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: router,
-        function: addLiquidityFn,
-        parameters: <dynamic>[
-          EthereumAddress.fromHex(tokenA),
-          EthereumAddress.fromHex(tokenB),
-          amountADesired,
-          amountBDesired,
-          amountAMin,
-          amountBMin,
-          EthereumAddress.fromHex(to),
-          deadline,
-        ],
-        maxGas: _addLiquidityGasLimit,
-      ),
-      chainId: chainId,
+  Future<String> transferErc20Raw({
+    required Account account,
+    required String tokenAddress,
+    required String to,
+    required BigInt amount,
+  }) async {
+    final contract = DeployedContract(
+      ContractAbi.fromJson(_erc20TransferAbiJson, 'ERC20Transfer'),
+      _parseAddressOrThrow(tokenAddress, field: 'token'),
+    );
+    final transfer = contract.function('transfer');
+    final tx = Transaction.callContract(
+      contract: contract,
+      function: transfer,
+      parameters: <dynamic>[
+        _parseAddressOrThrow(to, field: 'recipient'),
+        amount,
+      ],
+      maxGas: _erc20TransferGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'erc20_transfer_raw',
+      debugExtras: <String, dynamic>{
+        'tokenAddress': tokenAddress,
+        'to': to,
+        'amountRaw': amount.toString(),
+      },
+    );
+  }
+
+  Future<String> mintPair({
+    required Account account,
+    required String pairAddress,
+    required String to,
+  }) async {
+    final pair = DeployedContract(
+      ContractAbi.fromJson(_pairAbiJson, 'ReefswapPair'),
+      _parseAddressOrThrow(pairAddress, field: 'pair'),
+    );
+    final mint = pair.function('mint');
+    final tx = Transaction.callContract(
+      contract: pair,
+      function: mint,
+      parameters: <dynamic>[_parseAddressOrThrow(to, field: 'recipient')],
+      maxGas: _pairMintGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'pair_mint',
+      debugExtras: <String, dynamic>{'pairAddress': pairAddress, 'to': to},
     );
   }
 
@@ -448,31 +653,45 @@ class Web3Service {
     required BigInt deadline,
     required BigInt amountEthDesired,
   }) async {
-    final credentials = EthPrivateKey.fromHex(account.privateKey);
-    final chainId = await _resolveChainId();
+    final routerAddressParsed = _parseAddressOrThrow(
+      routerAddress,
+      field: 'router',
+    );
+    final token = _parseAddressOrThrow(tokenAddress, field: 'token');
+    final toAddress = _parseAddressOrThrow(to, field: 'recipient');
     final router = DeployedContract(
       ContractAbi.fromJson(_routerLiquidityAbiJson, 'ReefswapRouterLiquidity'),
-      EthereumAddress.fromHex(routerAddress),
+      routerAddressParsed,
     );
     final addLiquidityEthFn = router.function('addLiquidityETH');
-
-    return _client.sendTransaction(
-      credentials,
-      Transaction.callContract(
-        contract: router,
-        function: addLiquidityEthFn,
-        parameters: <dynamic>[
-          EthereumAddress.fromHex(tokenAddress),
-          amountTokenDesired,
-          amountTokenMin,
-          amountEthMin,
-          EthereumAddress.fromHex(to),
-          deadline,
-        ],
-        value: EtherAmount.inWei(amountEthDesired),
-        maxGas: _addLiquidityEthGasLimit,
-      ),
-      chainId: chainId,
+    final tx = Transaction.callContract(
+      contract: router,
+      function: addLiquidityEthFn,
+      parameters: <dynamic>[
+        token,
+        amountTokenDesired,
+        amountTokenMin,
+        amountEthMin,
+        toAddress,
+        deadline,
+      ],
+      value: EtherAmount.inWei(amountEthDesired),
+      maxGas: _addLiquidityEthGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'add_liquidity_eth',
+      debugExtras: <String, dynamic>{
+        'routerAddress': routerAddress,
+        'tokenAddress': tokenAddress,
+        'amountTokenDesired': amountTokenDesired.toString(),
+        'amountTokenMin': amountTokenMin.toString(),
+        'amountEthMin': amountEthMin.toString(),
+        'amountEthDesired': amountEthDesired.toString(),
+        'to': to,
+        'deadline': deadline.toString(),
+      },
     );
   }
 
@@ -551,20 +770,30 @@ class Web3Service {
     try {
       return await _client.getNetworkId();
     } catch (_) {
-      // Default Ethereum mainnet ID only as last fallback.
-      return 1;
+      // Fall back to local Reef chain id.
+      return DexConfig.defaultChainId;
     }
   }
 
   Future<int> getChainId() => _resolveChainId();
 
   Future<BigInt> getGasPriceWei() async {
+    BigInt gasPrice = BigInt.from(1000);
     try {
-      final gasPrice = await _client.getGasPrice();
-      return gasPrice.getInWei;
+      final fetched = await _client.getGasPrice();
+      gasPrice = fetched.getInWei;
     } catch (_) {
-      return BigInt.from(1000000000);
+      gasPrice = BigInt.from(1000);
     }
+
+    final baseFee = await _getLatestBaseFeeWei();
+    if (baseFee > gasPrice) {
+      gasPrice = baseFee;
+    }
+    if (gasPrice <= BigInt.zero) {
+      gasPrice = BigInt.from(1000);
+    }
+    return gasPrice;
   }
 
   Future<void> waitForReceipt(
@@ -579,5 +808,424 @@ class Web3Service {
       await Future<void>.delayed(pollInterval);
     }
     throw Exception('Timed out waiting for transaction receipt');
+  }
+
+  Future<String> _signAndBroadcast({
+    required Account account,
+    required Transaction transaction,
+    required String contextLabel,
+    Map<String, dynamic> debugExtras = const <String, dynamic>{},
+  }) async {
+    final credentials = EthPrivateKey.fromHex(account.privateKey);
+    final signerAddress = credentials.address;
+    final accountAddress = account.address.trim().toLowerCase();
+    final signerAddressText = signerAddress.hex.toLowerCase();
+    if (accountAddress.isEmpty || signerAddressText != accountAddress) {
+      throw Exception(
+        'Selected account credentials are invalid. Please re-import this account.',
+      );
+    }
+
+    final chainId = await _resolveChainId();
+    final gasPriceWei = await getGasPriceWei();
+    final nonce = await _recommendedNonce(signerAddress);
+    final txWithSignerFields = transaction.copyWith(
+      from: signerAddress,
+      nonce: nonce,
+      gasPrice: EtherAmount.inWei(gasPriceWei),
+      value: transaction.value ?? EtherAmount.zero(),
+      data: transaction.data ?? Uint8List(0),
+    );
+    final resolvedGasLimit = await _resolveGasLimit(
+      txWithSignerFields,
+      signerAddress,
+      contextLabel: contextLabel,
+    );
+    final preparedTx = txWithSignerFields.copyWith(maxGas: resolvedGasLimit);
+
+    _validateTransactionPayload(
+      preparedTx,
+      chainId: chainId,
+      fromAddress: signerAddress,
+      contextLabel: contextLabel,
+    );
+    await _assertSufficientBalance(preparedTx, signerAddress);
+    try {
+      return await _signAndSendRaw(
+        credentials,
+        preparedTx,
+        chainId: chainId,
+        contextLabel: contextLabel,
+        attempt: 1,
+        debugExtras: debugExtras,
+      );
+    } on RPCError catch (rpcError) {
+      print(
+        '[tx][rpc_error] context=$contextLabel code=${rpcError.errorCode} msg=${rpcError.message} data=${rpcError.data}',
+      );
+      if (_isRetryableInvalidTransaction(rpcError)) {
+        final nextNonce = await _recommendedNonce(signerAddress);
+        final currentGasPrice = preparedTx.gasPrice?.getInWei ?? BigInt.zero;
+        final networkGasPrice = await getGasPriceWei();
+        final bumpedGasPrice = _bumpGasPrice(
+          currentGasPrice > networkGasPrice ? currentGasPrice : networkGasPrice,
+        );
+        final retriedGasLimit = await _resolveGasLimit(
+          preparedTx.copyWith(
+            nonce: nextNonce,
+            gasPrice: EtherAmount.inWei(bumpedGasPrice),
+          ),
+          signerAddress,
+          contextLabel: '$contextLabel/retry',
+        );
+        final retryTx = preparedTx.copyWith(
+          nonce: nextNonce,
+          gasPrice: EtherAmount.inWei(bumpedGasPrice),
+          maxGas: retriedGasLimit,
+        );
+        _validateTransactionPayload(
+          retryTx,
+          chainId: chainId,
+          fromAddress: signerAddress,
+          contextLabel: '$contextLabel/retry',
+        );
+        await _assertSufficientBalance(retryTx, signerAddress);
+        try {
+          return await _signAndSendRaw(
+            credentials,
+            retryTx,
+            chainId: chainId,
+            contextLabel: contextLabel,
+            attempt: 2,
+            debugExtras: <String, dynamic>{
+              ...debugExtras,
+              'retry_reason': 'invalid_transaction',
+            },
+          );
+        } on RPCError catch (retryError) {
+          final mapped = _mapRpcErrorToUserMessage(
+            retryError,
+            defaultMessage: 'Transaction rejected by network.',
+          );
+          print(
+            '[tx][rpc_error_retry] context=$contextLabel code=${retryError.errorCode} msg=${retryError.message} data=${retryError.data}',
+          );
+          throw Exception(mapped);
+        }
+      }
+
+      final mapped = _mapRpcErrorToUserMessage(
+        rpcError,
+        defaultMessage: 'Transaction rejected by network.',
+      );
+      throw Exception(mapped);
+    } catch (e) {
+      print('[tx][error] context=$contextLabel error=$e');
+      rethrow;
+    }
+  }
+
+  Future<String> _signAndSendRaw(
+    EthPrivateKey credentials,
+    Transaction transaction, {
+    required int chainId,
+    required String contextLabel,
+    required int attempt,
+    required Map<String, dynamic> debugExtras,
+  }) async {
+    final payload = <String, dynamic>{
+      'context': contextLabel,
+      'attempt': attempt,
+      'rpcUrl': _rpcUrl,
+      'from': credentials.address.hex,
+      'to': transaction.to?.hex,
+      'valueWei': transaction.value?.getInWei.toString() ?? '0',
+      'nonce': transaction.nonce,
+      'gasLimit': transaction.maxGas,
+      'gasPriceWei': transaction.gasPrice?.getInWei.toString(),
+      'chainId': chainId,
+      'dataHex': bytesToHex(
+        transaction.data ?? Uint8List(0),
+        include0x: true,
+        padToEvenLength: true,
+      ),
+      ...debugExtras,
+    };
+    print('[tx][payload] ${jsonEncode(payload)}');
+
+    final signedTx = await _client.signTransaction(
+      credentials,
+      transaction,
+      chainId: chainId,
+    );
+    final rawTxHex = bytesToHex(
+      signedTx,
+      include0x: true,
+      padToEvenLength: true,
+    );
+    print('[tx][raw] context=$contextLabel attempt=$attempt raw=$rawTxHex');
+
+    final txHash = await _client.sendRawTransaction(signedTx);
+    print('[tx][hash] context=$contextLabel attempt=$attempt hash=$txHash');
+    return txHash;
+  }
+
+  Future<int> _recommendedNonce(EthereumAddress address) async {
+    final pending = await _client.getTransactionCount(
+      address,
+      atBlock: const BlockNum.pending(),
+    );
+    final latest = await _client.getTransactionCount(address);
+    return pending > latest ? pending : latest;
+  }
+
+  Future<int> _resolveGasLimit(
+    Transaction transaction,
+    EthereumAddress sender, {
+    required String contextLabel,
+  }) async {
+    final configuredLimit = transaction.maxGas;
+    final estimatedLimit = await _estimateGasLimitViaRpc(
+      transaction,
+      sender: sender,
+    );
+
+    if (estimatedLimit != null && estimatedLimit > BigInt.zero) {
+      final bufferedEstimate =
+          ((estimatedLimit * BigInt.from(12)) ~/ BigInt.from(10)); // +20%
+      final bufferedInt = bufferedEstimate.toInt();
+      final chosen = configuredLimit != null && configuredLimit > bufferedInt
+          ? configuredLimit
+          : bufferedInt;
+      print(
+        '[tx][gas] context=$contextLabel configured=${configuredLimit ?? 'null'} estimated=$estimatedLimit buffered=$bufferedInt chosen=$chosen',
+      );
+      return chosen;
+    }
+
+    final fallback = (configuredLimit != null && configuredLimit > 0)
+        ? configuredLimit
+        : _nativeTransferGasLimit;
+    print(
+      '[tx][gas] context=$contextLabel configured=${configuredLimit ?? 'null'} estimated=null chosen=$fallback',
+    );
+    return fallback;
+  }
+
+  Future<BigInt?> _estimateGasLimitViaRpc(
+    Transaction transaction, {
+    required EthereumAddress sender,
+  }) async {
+    try {
+      final txParams = <String, dynamic>{
+        'from': sender.hex,
+        if (transaction.to != null) 'to': transaction.to!.hex,
+        if ((transaction.value?.getInWei ?? BigInt.zero) > BigInt.zero)
+          'value': _toRpcQuantity(transaction.value!.getInWei),
+        if ((transaction.data ?? Uint8List(0)).isNotEmpty)
+          'data': bytesToHex(
+            transaction.data!,
+            include0x: true,
+            padToEvenLength: true,
+          ),
+        if ((transaction.gasPrice?.getInWei ?? BigInt.zero) > BigInt.zero)
+          'gasPrice': _toRpcQuantity(transaction.gasPrice!.getInWei),
+      };
+
+      final response = await _httpClient
+          .post(
+            Uri.parse(_rpcUrl),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'eth_estimateGas',
+              'params': <dynamic>[txParams],
+              'id': 1,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) return null;
+      final result = payload['result'];
+      if (result is! String || result.trim().isEmpty) return null;
+      return _parseRpcQuantity(result);
+    } catch (e) {
+      print('[tx][estimate_gas_error] error=$e');
+      return null;
+    }
+  }
+
+  static String _toRpcQuantity(BigInt value) {
+    if (value <= BigInt.zero) return '0x0';
+    return '0x${value.toRadixString(16)}';
+  }
+
+  static BigInt _parseRpcQuantity(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return BigInt.zero;
+    if (text.startsWith('0x') || text.startsWith('0X')) {
+      return BigInt.tryParse(text.substring(2), radix: 16) ?? BigInt.zero;
+    }
+    return BigInt.tryParse(text) ?? BigInt.zero;
+  }
+
+  BigInt _bumpGasPrice(BigInt currentWei) {
+    if (currentWei <= BigInt.zero) return BigInt.from(1000);
+    final extra = currentWei ~/ BigInt.from(5); // +20%
+    return currentWei + (extra > BigInt.zero ? extra : BigInt.one);
+  }
+
+  bool _isRetryableInvalidTransaction(RPCError rpcError) {
+    final raw = <String>[
+      rpcError.message,
+      if (rpcError.data != null) rpcError.data.toString(),
+    ].join(' ').toLowerCase();
+    return rpcError.errorCode == 1010 ||
+        raw.contains('invalid transaction') ||
+        raw.contains('nonce') ||
+        raw.contains('underpriced') ||
+        raw.contains('replacement');
+  }
+
+  Future<void> _assertSufficientBalance(
+    Transaction transaction,
+    EthereumAddress signerAddress,
+  ) async {
+    try {
+      final balance = await _client.getBalance(signerAddress);
+      final gasLimit = transaction.maxGas ?? 0;
+      final gasPriceWei = transaction.gasPrice?.getInWei ?? BigInt.zero;
+      final transferWei = transaction.value?.getInWei ?? BigInt.zero;
+      final feeWei = BigInt.from(gasLimit) * gasPriceWei;
+      final totalCostWei = transferWei + feeWei;
+      if (balance.getInWei < totalCostWei) {
+        throw Exception(
+          'Insufficient balance to cover transaction and network fee.',
+        );
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      print('[tx][balance_check_skipped] reason=$e');
+    }
+  }
+
+  void _validateTransactionPayload(
+    Transaction transaction, {
+    required int chainId,
+    required EthereumAddress fromAddress,
+    required String contextLabel,
+  }) {
+    if (fromAddress.hex.trim().isEmpty) {
+      throw Exception(
+        'Invalid transaction parameters: missing sender address.',
+      );
+    }
+
+    final toAddress = transaction.to;
+    final data = transaction.data ?? Uint8List(0);
+    if (toAddress == null && data.isEmpty) {
+      throw Exception(
+        'Invalid transaction parameters: destination or calldata is required.',
+      );
+    }
+
+    final valueWei = transaction.value?.getInWei ?? BigInt.zero;
+    if (valueWei < BigInt.zero) {
+      throw Exception('Invalid transaction parameters: negative value.');
+    }
+
+    final nonce = transaction.nonce;
+    if (nonce == null || nonce < 0) {
+      throw Exception('Invalid transaction parameters: nonce is invalid.');
+    }
+
+    final gasLimit = transaction.maxGas;
+    if (gasLimit == null || gasLimit <= 0) {
+      throw Exception('Invalid transaction parameters: gas limit is invalid.');
+    }
+
+    final gasPriceWei = transaction.gasPrice?.getInWei;
+    if (gasPriceWei == null || gasPriceWei <= BigInt.zero) {
+      throw Exception('Invalid transaction parameters: gas price is invalid.');
+    }
+
+    if (chainId <= 0) {
+      throw Exception('Invalid transaction parameters: chain id is invalid.');
+    }
+
+    print(
+      '[tx][validate_ok] context=$contextLabel from=${fromAddress.hex} to=${toAddress?.hex ?? 'contract_creation'} valueWei=$valueWei nonce=$nonce gasLimit=$gasLimit gasPriceWei=$gasPriceWei chainId=$chainId',
+    );
+  }
+
+  String _mapRpcErrorToUserMessage(
+    RPCError rpcError, {
+    required String defaultMessage,
+  }) {
+    return TransactionErrorMapper.fromRpc(
+      errorCode: rpcError.errorCode,
+      message: rpcError.message,
+      data: rpcError.data,
+      defaultMessage: defaultMessage,
+    );
+  }
+
+  Future<BigInt> _getLatestBaseFeeWei() async {
+    try {
+      final response = await _httpClient
+          .post(
+            Uri.parse(_rpcUrl),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'eth_getBlockByNumber',
+              'params': ['latest', false],
+              'id': 1,
+            }),
+          )
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return BigInt.zero;
+      }
+
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) return BigInt.zero;
+      final result = payload['result'];
+      if (result is! Map<String, dynamic>) return BigInt.zero;
+
+      final rawBaseFee = result['baseFeePerGas'];
+      if (rawBaseFee is! String || rawBaseFee.trim().isEmpty) {
+        return BigInt.zero;
+      }
+      final text = rawBaseFee.trim();
+      if (text.startsWith('0x')) {
+        return BigInt.tryParse(text.substring(2), radix: 16) ?? BigInt.zero;
+      }
+      return BigInt.tryParse(text) ?? BigInt.zero;
+    } catch (_) {
+      return BigInt.zero;
+    }
+  }
+
+  EthereumAddress _parseAddressOrThrow(String raw, {required String field}) {
+    final value = raw.trim();
+    if (value.isEmpty) {
+      throw Exception(
+        'Invalid transaction parameters: missing $field address.',
+      );
+    }
+    try {
+      return EthereumAddress.fromHex(value);
+    } catch (_) {
+      throw Exception(
+        'Invalid transaction parameters: malformed $field address.',
+      );
+    }
   }
 }

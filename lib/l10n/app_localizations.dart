@@ -97,8 +97,11 @@ class AppLocalizations {
   String get deleteAccountConfirm => _get('deleteAccountConfirm');
   String get deleteLabel => _get('deleteLabel');
   String get exportAccount => _get('exportAccount');
+  String get exportMnemonic => _get('exportMnemonic');
+  String get exportPrivateKey => _get('exportPrivateKey');
   String get mnemonicCopiedForExport => _get('mnemonicCopiedForExport');
   String get privateKeyCopiedForExport => _get('privateKeyCopiedForExport');
+  String get noMnemonicAvailable => _get('noMnemonicAvailable');
   String get tokenPools => _get('tokenPools');
   String get errorPrefix => _get('errorPrefix');
   String get tvlLabel => _get('tvlLabel');
@@ -106,6 +109,7 @@ class AppLocalizations {
   String get addAccountTitle => _get('addAccountTitle');
   String get createNew => _get('createNew');
   String get importRecoveryPhrase => _get('importRecoveryPhrase');
+  String get importPrivateKey => _get('importPrivateKey');
   String get failedToCreateAccount => _get('failedToCreateAccount');
   String get generatedRecoveryPhrase => _get('generatedRecoveryPhrase');
   String get copyToClipboard => _get('copyToClipboard');
@@ -119,7 +123,9 @@ class AppLocalizations {
   String get repeatPasswordForVerification =>
       _get('repeatPasswordForVerification');
   String get importFromPhrase => _get('importFromPhrase');
+  String get importFromPrivateKey => _get('importFromPrivateKey');
   String get enterMnemonicPhrase => _get('enterMnemonicPhrase');
+  String get enterPrivateKey => _get('enterPrivateKey');
   String get importLabel => _get('importLabel');
   String get addressCopied => _get('addressCopied');
   String get recoveryPhraseCopied => _get('recoveryPhraseCopied');
@@ -218,8 +224,11 @@ _localizedValues = <String, Map<String, String>>{
     'deleteAccountConfirm': 'This will clear the currently active account.',
     'deleteLabel': 'Delete',
     'exportAccount': 'Export Account',
+    'exportMnemonic': 'Export Mnemonic',
+    'exportPrivateKey': 'Export Private Key',
     'mnemonicCopiedForExport': 'Mnemonic copied for export',
     'privateKeyCopiedForExport': 'Private key copied for export',
+    'noMnemonicAvailable': 'No mnemonic found for this account',
     'tokenPools': 'Token Pools',
     'errorPrefix': 'Error',
     'tvlLabel': 'TVL',
@@ -227,6 +236,7 @@ _localizedValues = <String, Map<String, String>>{
     'addAccountTitle': 'Add Account',
     'createNew': 'Create new',
     'importRecoveryPhrase': 'Import recovery phrase',
+    'importPrivateKey': 'Import private key',
     'failedToCreateAccount': 'Failed to create account',
     'generatedRecoveryPhrase': 'GENERATED 12-WORD RECOVERY PHRASE (MNEMONIC):',
     'copyToClipboard': 'Copy to clipboard',
@@ -240,7 +250,9 @@ _localizedValues = <String, Map<String, String>>{
     'passwordForReefApp': 'A PASSWORD FOR REEF APP',
     'repeatPasswordForVerification': 'REPEAT PASSWORD FOR VERIFICATION',
     'importFromPhrase': 'Import from Phrase',
+    'importFromPrivateKey': 'Import from Private Key',
     'enterMnemonicPhrase': 'Enter mnemonic phrase...',
+    'enterPrivateKey': 'Enter private key...',
     'importLabel': 'Import',
     'addressCopied': 'Address copied',
     'recoveryPhraseCopied': 'Recovery phrase copied',
@@ -318,8 +330,11 @@ _localizedValues = <String, Map<String, String>>{
     'deleteAccountConfirm': 'यह वर्तमान सक्रिय अकाउंट को हटा देगा।',
     'deleteLabel': 'हटाएं',
     'exportAccount': 'अकाउंट एक्सपोर्ट करें',
+    'exportMnemonic': 'म्नेमोनिक एक्सपोर्ट करें',
+    'exportPrivateKey': 'प्राइवेट की एक्सपोर्ट करें',
     'mnemonicCopiedForExport': 'एक्सपोर्ट के लिए म्नेमोनिक कॉपी हुआ',
     'privateKeyCopiedForExport': 'एक्सपोर्ट के लिए प्राइवेट की कॉपी हुई',
+    'noMnemonicAvailable': 'इस अकाउंट के लिए म्नेमोनिक उपलब्ध नहीं है',
     'tokenPools': 'टोकन पूल',
     'errorPrefix': 'त्रुटि',
     'tvlLabel': 'TVL',
@@ -327,6 +342,7 @@ _localizedValues = <String, Map<String, String>>{
     'addAccountTitle': 'अकाउंट जोड़ें',
     'createNew': 'नया बनाएं',
     'importRecoveryPhrase': 'रिकवरी फ़्रेज़ इंपोर्ट करें',
+    'importPrivateKey': 'प्राइवेट की इंपोर्ट करें',
     'failedToCreateAccount': 'अकाउंट बनाना विफल रहा',
     'generatedRecoveryPhrase': 'उत्पन्न 12-शब्द रिकवरी फ़्रेज़ (MNEMONIC):',
     'copyToClipboard': 'क्लिपबोर्ड में कॉपी करें',
@@ -340,7 +356,9 @@ _localizedValues = <String, Map<String, String>>{
     'passwordForReefApp': 'रीफ ऐप के लिए पासवर्ड',
     'repeatPasswordForVerification': 'सत्यापन के लिए पासवर्ड दोहराएं',
     'importFromPhrase': 'फ़्रेज़ से इंपोर्ट करें',
+    'importFromPrivateKey': 'प्राइवेट की से इंपोर्ट करें',
     'enterMnemonicPhrase': 'म्नेमोनिक फ़्रेज़ दर्ज करें...',
+    'enterPrivateKey': 'प्राइवेट की दर्ज करें...',
     'importLabel': 'इंपोर्ट',
     'addressCopied': 'पता कॉपी हुआ',
     'recoveryPhraseCopied': 'रिकवरी फ़्रेज़ कॉपी हुआ',
@@ -418,8 +436,11 @@ _localizedValues = <String, Map<String, String>>{
     'deleteAccountConfirm': 'Questo cancellerà l\'account attualmente attivo.',
     'deleteLabel': 'Elimina',
     'exportAccount': 'Esporta Account',
+    'exportMnemonic': 'Esporta Mnemonic',
+    'exportPrivateKey': 'Esporta Chiave Privata',
     'mnemonicCopiedForExport': 'Mnemonic copiato per l\'esportazione',
     'privateKeyCopiedForExport': 'Chiave privata copiata per l\'esportazione',
+    'noMnemonicAvailable': 'Nessun mnemonic disponibile per questo account',
     'tokenPools': 'Pool Token',
     'errorPrefix': 'Errore',
     'tvlLabel': 'TVL',
@@ -427,6 +448,7 @@ _localizedValues = <String, Map<String, String>>{
     'addAccountTitle': 'Aggiungi Account',
     'createNew': 'Crea nuovo',
     'importRecoveryPhrase': 'Importa frase di recupero',
+    'importPrivateKey': 'Importa chiave privata',
     'failedToCreateAccount': 'Creazione account non riuscita',
     'generatedRecoveryPhrase':
         'FRASE DI RECUPERO DI 12 PAROLE GENERATA (MNEMONIC):',
@@ -441,7 +463,9 @@ _localizedValues = <String, Map<String, String>>{
     'passwordForReefApp': 'UNA PASSWORD PER L\'APP REEF',
     'repeatPasswordForVerification': 'RIPETI LA PASSWORD PER LA VERIFICA',
     'importFromPhrase': 'Importa da frase',
+    'importFromPrivateKey': 'Importa da chiave privata',
     'enterMnemonicPhrase': 'Inserisci frase mnemonica...',
+    'enterPrivateKey': 'Inserisci chiave privata...',
     'importLabel': 'Importa',
     'addressCopied': 'Indirizzo copiato',
     'recoveryPhraseCopied': 'Recovery phrase copiata',

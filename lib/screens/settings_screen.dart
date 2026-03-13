@@ -12,6 +12,7 @@ import '../widgets/change_password_modal.dart';
 import '../widgets/settings/language_selection_sheet.dart';
 import '../widgets/settings/rpc_edit_dialog.dart';
 import '../core/theme/styles.dart';
+import '../core/theme/reef_theme_colors.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -22,9 +23,12 @@ class SettingsScreen extends ConsumerWidget {
     final walletState = ref.watch(walletProvider);
     final developerExpanded = settings.isDeveloperExpanded;
     final l10n = AppLocalizations.of(context);
+    final colors = context.reefColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hideBalances = !walletState.showBalance;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D6E3),
+      backgroundColor: colors.pageBackground,
       body: Column(
         children: [
           Material(
@@ -51,17 +55,37 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 Text(
                   l10n.settings,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: Styles.fsPageTitle,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF3B3C44),
+                    color: colors.textPrimary,
                   ),
                 ),
                 const Gap(14),
-                const Divider(color: Color(0xFF8F98B5), thickness: 1.2),
+                Divider(color: colors.borderColor, thickness: 1.2),
+                _settingsRow(
+                  icon: isDark
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                  title: 'Dark Mode',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  trailing: Switch.adaptive(
+                    value: settings.darkModeEnabled,
+                    onChanged: (value) {
+                      ref
+                          .read(settingsProvider.notifier)
+                          .setThemeMode(
+                            value ? ThemeMode.dark : ThemeMode.light,
+                          );
+                    },
+                  ),
+                ),
                 _settingsRow(
                   icon: Icons.home_rounded,
                   title: l10n.goHomeOnSwitch,
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
                   trailing: _SettingsCheckbox(
                     value: settings.goHomeEnabled,
                     onChanged: (value) {
@@ -74,6 +98,8 @@ class SettingsScreen extends ConsumerWidget {
                 _settingsRow(
                   icon: Icons.fingerprint_rounded,
                   title: l10n.biometricAuth,
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
                   trailing: _SettingsCheckbox(
                     value: settings.biometricsEnabled,
                     onChanged: (value) {
@@ -82,30 +108,92 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 _settingsRow(
+                  icon: hideBalances
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  title: 'Hide Balances',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  trailing: _SettingsCheckbox(
+                    value: hideBalances,
+                    onChanged: (value) {
+                      if (value == hideBalances) return;
+                      ref
+                          .read(walletProvider.notifier)
+                          .toggleBalanceVisibility();
+                    },
+                  ),
+                ),
+                _settingsRow(
                   icon: Icons.lock_rounded,
                   title: l10n.changePassword,
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
                   onTap: () => showChangePasswordModal(context),
                 ),
                 _settingsRow(
                   icon: Icons.public_rounded,
                   title: l10n.selectLanguage,
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
                   onTap: () => showLanguageSelectionSheet(
                     context: context,
                     ref: ref,
                     l10n: l10n,
                   ),
                 ),
+                _settingsRow(
+                  icon: Icons.refresh_rounded,
+                  title: 'Refresh Balances',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  onTap: () async {
+                    await ref.read(walletProvider.notifier).refreshPortfolio();
+                    await ref
+                        .read(walletProvider.notifier)
+                        .refreshAllAccountBalances();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Balances refreshed')),
+                    );
+                  },
+                ),
+                _settingsRow(
+                  icon: Icons.copy_rounded,
+                  title: 'Copy Active Address',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  onTap: () async {
+                    final address = walletState.activeAccount?.address;
+                    if (address == null || address.trim().isEmpty) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No active account selected'),
+                        ),
+                      );
+                      return;
+                    }
+                    await Clipboard.setData(ClipboardData(text: address));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(l10n.copied)));
+                  },
+                ),
                 const Gap(10),
-                const Divider(color: Color(0xFF8F98B5), thickness: 1.2),
+                Divider(color: colors.borderColor, thickness: 1.2),
                 _settingsRow(
                   icon: Icons.code_rounded,
                   title: l10n.developerSettings,
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
                   trailing: Icon(
                     developerExpanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
                     size: 28,
-                    color: const Color(0xFF23232D),
+                    color: colors.textPrimary,
                   ),
                   onTap: () {
                     ref
@@ -126,6 +214,8 @@ class SettingsScreen extends ConsumerWidget {
   static Widget _settingsRow({
     required IconData icon,
     required String title,
+    required Color textColor,
+    required Color iconColor,
     Widget? trailing,
     VoidCallback? onTap,
   }) {
@@ -136,13 +226,13 @@ class SettingsScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF8D96B0), size: 30),
+            Icon(icon, color: iconColor, size: 30),
             const Gap(12),
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
-                  color: Color(0xFF1F1E27),
+                style: TextStyle(
+                  color: textColor,
                   fontSize: Styles.fsBodyStrong,
                   fontWeight: FontWeight.w800,
                 ),
@@ -161,16 +251,17 @@ class SettingsScreen extends ConsumerWidget {
     String rpcUrl,
     AppLocalizations l10n,
   ) {
+    final colors = context.reefColors;
     return Container(
       margin: const EdgeInsets.only(left: 46, right: 12, bottom: 12, top: 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFEDE8F8), Color(0xFFE4DCF3)],
+          colors: [colors.cardBackground, colors.cardBackgroundSecondary],
         ),
-        border: Border.all(color: const Color(0xFFBEB4D6), width: 1),
+        border: Border.all(color: colors.borderColor, width: 1),
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
@@ -185,12 +276,12 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.hub_rounded, color: Color(0xFF7A3CC5), size: 18),
+              Icon(Icons.hub_rounded, color: colors.accentStrong, size: 18),
               const Gap(6),
               Text(
                 l10n.rpcEndpoint,
-                style: const TextStyle(
-                  color: Color(0xFF2A2338),
+                style: TextStyle(
+                  color: colors.textPrimary,
                   fontWeight: FontWeight.w900,
                   fontSize: Styles.fsBodyStrong,
                 ),
@@ -202,9 +293,9 @@ class SettingsScreen extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.8),
+              color: colors.inputFill.withOpacity(0.85),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFC9C1DB)),
+              border: Border.all(color: colors.inputBorder),
             ),
             child: Row(
               children: [
@@ -213,8 +304,8 @@ class SettingsScreen extends ConsumerWidget {
                     rpcUrl,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF4A4260),
+                    style: TextStyle(
+                      color: colors.textSecondary,
                       fontWeight: FontWeight.w700,
                       fontSize: Styles.fsBody,
                     ),
@@ -230,11 +321,11 @@ class SettingsScreen extends ConsumerWidget {
                       context,
                     ).showSnackBar(SnackBar(content: Text(l10n.copied)));
                   },
-                  child: const Padding(
-                    padding: EdgeInsets.all(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
                     child: Icon(
                       Icons.copy_rounded,
-                      color: Color(0xFF7A3CC5),
+                      color: colors.accentStrong,
                       size: 18,
                     ),
                   ),
@@ -253,7 +344,7 @@ class SettingsScreen extends ConsumerWidget {
                   l10n: l10n,
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B34BD),
+                  backgroundColor: colors.accentStrong,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -286,13 +377,14 @@ class _SettingsCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     return SquareCheckbox(
       value: value,
       onChanged: onChanged,
       size: 30,
-      borderColor: const Color(0xFF9AA2BC),
-      checkColor: const Color(0xFFB9359A),
-      fillColor: Colors.white,
+      borderColor: colors.inputBorder,
+      checkColor: colors.accent,
+      fillColor: colors.inputFill,
       borderWidth: 2,
       borderRadius: 4,
     );

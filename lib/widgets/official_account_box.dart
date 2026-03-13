@@ -11,7 +11,8 @@ enum AccountMenuAction {
   copyEvmAddress,
   renameAccount,
   delete,
-  exportAccount,
+  exportMnemonic,
+  exportPrivateKey,
 }
 
 class AccountBox extends StatelessWidget {
@@ -29,7 +30,8 @@ class AccountBox extends StatelessWidget {
   final String copyEvmAddressText;
   final String renameAccountText;
   final String deleteText;
-  final String exportAccountText;
+  final String exportMnemonicText;
+  final String exportPrivateKeyText;
 
   const AccountBox({
     Key? key,
@@ -47,7 +49,8 @@ class AccountBox extends StatelessWidget {
     this.copyEvmAddressText = 'Copy EVM Address',
     this.renameAccountText = 'Rename Account',
     this.deleteText = 'Delete',
-    this.exportAccountText = 'Export Account',
+    this.exportMnemonicText = 'Export Mnemonic',
+    this.exportPrivateKeyText = 'Export Private Key',
   }) : super(key: key);
 
   @override
@@ -269,9 +272,19 @@ class AccountBox extends StatelessWidget {
                               ),
                             ),
                             PopupMenuItem(
-                              value: AccountMenuAction.exportAccount,
+                              value: AccountMenuAction.exportMnemonic,
                               child: Text(
-                                exportAccountText,
+                                exportMnemonicText,
+                                style: TextStyle(
+                                  color: Color(0xFF1F1F28),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: AccountMenuAction.exportPrivateKey,
+                              child: Text(
+                                exportPrivateKeyText,
                                 style: TextStyle(
                                   color: Color(0xFF1F1F28),
                                   fontWeight: FontWeight.w700,

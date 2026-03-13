@@ -7,6 +7,7 @@ import '../models/token.dart';
 import '../providers/pool_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../core/theme/styles.dart';
+import '../core/theme/reef_theme_colors.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/pools/create_pool_sheet.dart';
 import '../widgets/pools/pool_list_card.dart';
@@ -20,11 +21,13 @@ class PoolsScreen extends ConsumerWidget {
     final poolsAsyncValue = ref.watch(poolsProvider);
     final walletState = ref.watch(walletProvider);
     final l10n = AppLocalizations.of(context);
+    final colors = context.reefColors;
+    final onDeep = Theme.of(context).colorScheme.onPrimary;
     final poolCount = poolsAsyncValue.asData?.value.length;
     final canCreatePool = _countUniqueTokens(walletState.portfolioTokens) >= 2;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF2B0052),
+      backgroundColor: colors.deepBackground,
       body: Column(
         children: [
           Material(
@@ -68,8 +71,8 @@ class PoolsScreen extends ConsumerWidget {
                         poolCount == null
                             ? 'Loading pools...'
                             : '$poolCount pools indexed',
-                        style: const TextStyle(
-                          color: Color(0xFFCABDE5),
+                        style: TextStyle(
+                          color: onDeep.withOpacity(0.78),
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -80,13 +83,15 @@ class PoolsScreen extends ConsumerWidget {
                 const Gap(12),
                 DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFB536A5), Color(0xFF6D38BC)],
+                    gradient: LinearGradient(
+                      colors: [colors.accent, colors.accentStrong],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0x80F17BDC)),
+                    border: Border.all(
+                      color: colors.borderColor.withOpacity(0.5),
+                    ),
                     boxShadow: const [
                       BoxShadow(
                         color: Color(0x2B080314),
@@ -141,7 +146,7 @@ class PoolsScreen extends ConsumerWidget {
               error: (err, stack) => Center(
                 child: Text(
                   '${l10n.errorPrefix}: $err',
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: onDeep),
                 ),
               ),
               data: (pools) {
@@ -153,27 +158,27 @@ class PoolsScreen extends ConsumerWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF0EBF9),
+                          color: colors.cardBackground,
                           borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: const Color(0xFFD8CDEB)),
+                          border: Border.all(color: colors.borderColor),
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
+                            Text(
                               'No pools indexed yet.',
                               style: TextStyle(
-                                color: Styles.textColor,
+                                color: colors.textPrimary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             const Gap(6),
-                            const Text(
+                            Text(
                               'Create a new pool to bootstrap liquidity on Reef.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Styles.textLightColor,
+                                color: colors.textSecondary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -186,8 +191,7 @@ class PoolsScreen extends ConsumerWidget {
                                 canCreatePool: canCreatePool,
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Styles.secondaryAccentColorDark,
+                                backgroundColor: colors.accentStrong,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),

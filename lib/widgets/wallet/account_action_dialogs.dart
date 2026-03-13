@@ -47,16 +47,34 @@ Future<String?> showRenameAccountDialog({
       barrierDismissible: true,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (localContext, setState) {
+            final palette = _dialogPalette(localContext);
             final canSave = controller.text.trim().isNotEmpty;
             return AlertDialog(
-              title: Text(l10n.renameAccountTitle),
+              backgroundColor: palette.background,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: Text(
+                l10n.renameAccountTitle,
+                style: TextStyle(
+                  color: palette.title,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               content: TextField(
                 controller: controller,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
-                style: const TextStyle(color: Color(0xFF1F1F28)),
-                decoration: InputDecoration(
+                cursorColor: palette.accent,
+                style: TextStyle(
+                  color: palette.inputText,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: _dialogInputDecoration(
+                  palette: palette,
                   labelText: l10n.accountNameLabel,
                   hintText: l10n.noName,
                 ),
@@ -68,15 +86,27 @@ Future<String?> showRenameAccountDialog({
               ),
               actions: [
                 TextButton(
+                  style: _dialogActionButtonStyle(),
                   onPressed: () => Navigator.pop(dialogContext),
-                  child: Text(l10n.cancel),
+                  child: Text(
+                    l10n.cancel,
+                    style: TextStyle(color: palette.actionText),
+                  ),
                 ),
                 TextButton(
+                  style: _dialogActionButtonStyle(),
                   onPressed: canSave
                       ? () =>
                             Navigator.pop(dialogContext, controller.text.trim())
                       : null,
-                  child: Text(l10n.save),
+                  child: Text(
+                    l10n.save,
+                    style: TextStyle(
+                      color: canSave
+                          ? palette.actionText
+                          : palette.actionText.withOpacity(0.45),
+                    ),
+                  ),
                 ),
               ],
             );
@@ -113,7 +143,8 @@ Future<bool> confirmExportWithPassword({
         bool loading = false;
 
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (localContext, setState) {
+            final palette = _dialogPalette(localContext);
             Future<void> submit() async {
               final input = controller.text.trim();
               if (input.isEmpty) {
@@ -135,14 +166,31 @@ Future<bool> confirmExportWithPassword({
             }
 
             return AlertDialog(
-              title: Text(l10n.exportAccount),
+              backgroundColor: palette.background,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: Text(
+                l10n.exportAccount,
+                style: TextStyle(
+                  color: palette.title,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               content: TextField(
                 controller: controller,
                 autofocus: true,
                 obscureText: true,
                 textInputAction: TextInputAction.done,
-                style: const TextStyle(color: Color(0xFF1F1F28)),
-                decoration: InputDecoration(
+                cursorColor: palette.accent,
+                style: TextStyle(
+                  color: palette.inputText,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: _dialogInputDecoration(
+                  palette: palette,
                   labelText: l10n.enterAppPassword,
                   errorText: invalidPassword ? l10n.invalidPassword : null,
                 ),
@@ -154,14 +202,30 @@ Future<bool> confirmExportWithPassword({
               ),
               actions: [
                 TextButton(
+                  style: _dialogActionButtonStyle(),
                   onPressed: loading
                       ? null
                       : () => Navigator.pop(dialogContext, false),
-                  child: Text(l10n.cancel),
+                  child: Text(
+                    l10n.cancel,
+                    style: TextStyle(
+                      color: loading
+                          ? palette.actionText.withOpacity(0.45)
+                          : palette.actionText,
+                    ),
+                  ),
                 ),
                 TextButton(
+                  style: _dialogActionButtonStyle(),
                   onPressed: loading ? null : submit,
-                  child: Text(l10n.exportAccount),
+                  child: Text(
+                    l10n.exportAccount,
+                    style: TextStyle(
+                      color: loading
+                          ? palette.actionText.withOpacity(0.45)
+                          : palette.actionText,
+                    ),
+                  ),
                 ),
               ],
             );
@@ -173,4 +237,88 @@ Future<bool> confirmExportWithPassword({
   } finally {
     controller.dispose();
   }
+}
+
+class _DialogPalette {
+  final Color background;
+  final Color title;
+  final Color inputText;
+  final Color inputLabel;
+  final Color inputBorder;
+  final Color hint;
+  final Color actionText;
+  final Color accent;
+
+  const _DialogPalette({
+    required this.background,
+    required this.title,
+    required this.inputText,
+    required this.inputLabel,
+    required this.inputBorder,
+    required this.hint,
+    required this.actionText,
+    required this.accent,
+  });
+}
+
+_DialogPalette _dialogPalette(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  if (isDark) {
+    return const _DialogPalette(
+      background: Color(0xFF42007A),
+      title: Colors.white,
+      inputText: Colors.white,
+      inputLabel: Color(0xFFB898D9),
+      inputBorder: Color(0xFFB355D8),
+      hint: Color(0xFF997CB8),
+      actionText: Color(0xFFD565E5),
+      accent: Color(0xFFD15BE6),
+    );
+  }
+
+  return const _DialogPalette(
+    background: Colors.white,
+    title: Color(0xFF22263D),
+    inputText: Color(0xFF1F1F28),
+    inputLabel: Color(0xFF8087A0),
+    inputBorder: Color(0xFFC7CAD8),
+    hint: Color(0xFFA2A8BB),
+    actionText: Color(0xFF8C2AC9),
+    accent: Color(0xFF8C2AC9),
+  );
+}
+
+InputDecoration _dialogInputDecoration({
+  required _DialogPalette palette,
+  required String labelText,
+  String? hintText,
+  String? errorText,
+}) {
+  return InputDecoration(
+    labelText: labelText,
+    hintText: hintText,
+    errorText: errorText,
+    labelStyle: TextStyle(
+      color: palette.inputLabel,
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
+    ),
+    hintStyle: TextStyle(
+      color: palette.hint,
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
+    ),
+    enabledBorder: UnderlineInputBorder(
+      borderSide: BorderSide(color: palette.inputBorder, width: 2),
+    ),
+    focusedBorder: UnderlineInputBorder(
+      borderSide: BorderSide(color: palette.accent, width: 2),
+    ),
+  );
+}
+
+ButtonStyle _dialogActionButtonStyle() {
+  return TextButton.styleFrom(
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+  );
 }

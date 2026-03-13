@@ -2,18 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'service_providers.dart';
 import '../constants/storage_keys.dart';
+import 'package:flutter/material.dart';
 
 class SettingsState {
   final String rpcUrl;
   final bool? useBiometrics;
   final bool? goHomeOnSwitch;
   final bool? developerExpanded;
+  final ThemeMode themeMode;
 
   SettingsState({
     required this.rpcUrl,
     required this.useBiometrics,
     required this.goHomeOnSwitch,
     this.developerExpanded,
+    required this.themeMode,
   });
 
   SettingsState copyWith({
@@ -21,18 +24,21 @@ class SettingsState {
     bool? useBiometrics,
     bool? goHomeOnSwitch,
     bool? developerExpanded,
+    ThemeMode? themeMode,
   }) {
     return SettingsState(
       rpcUrl: rpcUrl ?? this.rpcUrl,
       useBiometrics: useBiometrics ?? this.useBiometrics,
       goHomeOnSwitch: goHomeOnSwitch ?? this.goHomeOnSwitch,
       developerExpanded: developerExpanded ?? this.developerExpanded,
+      themeMode: themeMode ?? this.themeMode,
     );
   }
 
   bool get isDeveloperExpanded => developerExpanded ?? false;
   bool get biometricsEnabled => useBiometrics ?? false;
   bool get goHomeEnabled => goHomeOnSwitch ?? true;
+  bool get darkModeEnabled => themeMode == ThemeMode.dark;
 }
 
 class SettingsNotifier extends Notifier<SettingsState> {
@@ -47,6 +53,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       useBiometrics: false,
       goHomeOnSwitch: true,
       developerExpanded: false,
+      themeMode: ThemeMode.dark,
     );
   }
 
@@ -55,12 +62,14 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final rpc = prefs.getString(StorageKeys.rpcUrl) ?? _defaultRpcUrl;
     final biometrics = prefs.getBool(StorageKeys.useBiometrics) ?? false;
     final goHome = prefs.getBool(StorageKeys.goHomeOnSwitch) ?? true;
+    final themeModeRaw = prefs.getString(StorageKeys.themeMode);
 
     state = state.copyWith(
       rpcUrl: rpc,
       useBiometrics: biometrics,
       goHomeOnSwitch: goHome,
       developerExpanded: state.developerExpanded,
+      themeMode: _parseThemeMode(themeModeRaw),
     );
 
     // Update Web3 Service
@@ -88,8 +97,29 @@ class SettingsNotifier extends Notifier<SettingsState> {
     state = state.copyWith(goHomeOnSwitch: enabled);
   }
 
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(StorageKeys.themeMode, _themeModeToStorage(mode));
+    state = state.copyWith(themeMode: mode);
+  }
+
   void setDeveloperExpanded(bool expanded) {
     state = state.copyWith(developerExpanded: expanded);
+  }
+
+  static ThemeMode _parseThemeMode(String? raw) {
+    switch ((raw ?? '').trim().toLowerCase()) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.dark;
+    }
+  }
+
+  static String _themeModeToStorage(ThemeMode mode) {
+    return mode == ThemeMode.light ? 'light' : 'dark';
   }
 }
 

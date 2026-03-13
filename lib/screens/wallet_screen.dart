@@ -426,7 +426,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       copyEvmAddressText: l10n.copyEvmAddress,
       renameAccountText: l10n.renameAccount,
       deleteText: l10n.deleteLabel,
-      exportAccountText: l10n.exportAccount,
+      exportMnemonicText: l10n.exportMnemonic,
+      exportPrivateKeyText: l10n.exportPrivateKey,
     );
   }
 
@@ -550,25 +551,45 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               .deleteAccount(account.address);
         }
         break;
-      case AccountMenuAction.exportAccount:
+      case AccountMenuAction.exportMnemonic:
         final canExport = await confirmExportWithPassword(
           context: context,
           l10n: l10n,
           authService: ref.read(authServiceProvider),
         );
         if (!canExport) return;
-        final exportValue = account.mnemonic.isNotEmpty
-            ? account.mnemonic
-            : account.privateKey;
+        if (account.mnemonic.trim().isEmpty) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.noMnemonicAvailable),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+          return;
+        }
+        final exportValue = account.mnemonic.trim();
         await Clipboard.setData(ClipboardData(text: exportValue));
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              account.mnemonic.isNotEmpty
-                  ? l10n.mnemonicCopiedForExport
-                  : l10n.privateKeyCopiedForExport,
-            ),
+            content: Text(l10n.mnemonicCopiedForExport),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+        break;
+      case AccountMenuAction.exportPrivateKey:
+        final canExport = await confirmExportWithPassword(
+          context: context,
+          l10n: l10n,
+          authService: ref.read(authServiceProvider),
+        );
+        if (!canExport) return;
+        await Clipboard.setData(ClipboardData(text: account.privateKey.trim()));
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.privateKeyCopiedForExport),
             duration: const Duration(seconds: 1),
           ),
         );

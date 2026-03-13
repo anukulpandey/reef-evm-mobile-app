@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../core/theme/styles.dart';
+import '../core/theme/reef_theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
 Widget topBar(
@@ -48,16 +48,17 @@ class _AccountPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.42,
       ),
       child: ActionChip(
-        avatar: const Icon(Icons.wallet, color: Styles.textColor, size: 18),
+        avatar: Icon(Icons.wallet, color: colors.topBarChipIcon, size: 18),
         label: Text(
           title,
           style: GoogleFonts.spaceGrotesk(
-            color: Styles.purpleColor,
+            color: colors.topBarChipText,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -65,7 +66,7 @@ class _AccountPill extends StatelessWidget {
           maxLines: 1,
           softWrap: false,
         ),
-        backgroundColor: Styles.primaryBackgroundColor,
+        backgroundColor: colors.topBarChipBackground,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         onPressed: () {},
       ),

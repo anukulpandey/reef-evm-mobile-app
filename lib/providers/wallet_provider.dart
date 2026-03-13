@@ -384,35 +384,73 @@ class WalletNotifier extends Notifier<WalletState> {
   }
 
   Future<Account?> createAccount() async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, error: null);
     try {
       final walletService = ref.read(walletServiceProvider);
-      final newAccount = await walletService.createWallet();
-      state = state.copyWith(
-        activeAccount: newAccount,
-        accountName: '<No Name>',
-        isLoading: false,
-        balance: '0.0',
-        tokens: const <Token>[],
-      );
-      await walletService.setLastActiveAccount(newAccount.address);
-      await refreshPortfolio();
-      return newAccount;
+      final draftAccount = await walletService.createWalletDraft();
+      state = state.copyWith(isLoading: false, error: null);
+      return draftAccount;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
       return null;
     }
   }
 
-  Future<void> importMnemonic(String mnemonic) async {
+  Future<bool> saveCreatedAccount({
+    required Account draftAccount,
+    required String name,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Account name is required.',
+      );
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final walletService = ref.read(walletServiceProvider);
+      await walletService.persistAccount(draftAccount, name: trimmedName);
+      state = state.copyWith(
+        activeAccount: draftAccount,
+        accountName: trimmedName,
+        isLoading: false,
+        balance: '0.0',
+        tokens: const <Token>[],
+        error: null,
+      );
+      await walletService.setLastActiveAccount(draftAccount.address);
+      _ensureAutoRefresh();
+      await refreshPortfolio();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  Future<void> importMnemonic(
+    String mnemonic, {
+    required String accountName,
+  }) async {
+    final trimmedName = accountName.trim();
+    if (trimmedName.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Account name is required.',
+      );
+      return;
+    }
     state = state.copyWith(isLoading: true);
     try {
       final walletService = ref.read(walletServiceProvider);
       final newAccount = await walletService.importFromMnemonic(mnemonic);
-      final savedName = await walletService.getAccountName(newAccount.address);
+      await walletService.saveAccountName(newAccount.address, trimmedName);
       state = state.copyWith(
         activeAccount: newAccount,
-        accountName: savedName ?? '<No Name>',
+        accountName: trimmedName,
         isLoading: false,
         tokens: const <Token>[],
       );
@@ -423,15 +461,26 @@ class WalletNotifier extends Notifier<WalletState> {
     }
   }
 
-  Future<void> importPrivateKey(String pk) async {
+  Future<void> importPrivateKey(
+    String pk, {
+    required String accountName,
+  }) async {
+    final trimmedName = accountName.trim();
+    if (trimmedName.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Account name is required.',
+      );
+      return;
+    }
     state = state.copyWith(isLoading: true);
     try {
       final walletService = ref.read(walletServiceProvider);
       final newAccount = await walletService.importFromPrivateKey(pk);
-      final savedName = await walletService.getAccountName(newAccount.address);
+      await walletService.saveAccountName(newAccount.address, trimmedName);
       state = state.copyWith(
         activeAccount: newAccount,
-        accountName: savedName ?? '<No Name>',
+        accountName: trimmedName,
         isLoading: false,
         tokens: const <Token>[],
       );
@@ -450,7 +499,10 @@ class WalletNotifier extends Notifier<WalletState> {
 
   Future<void> setAccountName(String name) async {
     final trimmed = name.trim();
-    final value = trimmed.isEmpty ? '<No Name>' : trimmed;
+    if (trimmed.isEmpty) {
+      throw Exception('Account name is required');
+    }
+    final value = trimmed;
     final activeAddress = state.activeAccount?.address;
     if (activeAddress != null) {
       final walletService = ref.read(walletServiceProvider);

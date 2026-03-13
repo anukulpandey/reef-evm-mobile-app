@@ -10,4 +10,5 @@ class StorageKeys {
   static const String displayBalance = 'display_balance_v1';
   static const String rpcUrl = 'rpc_url';
   static const String goHomeOnSwitch = 'go_home_on_switch';
+  static const String themeMode = 'theme_mode';
 }

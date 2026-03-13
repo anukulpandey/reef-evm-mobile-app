@@ -8,6 +8,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 
 import '../core/config/dex_config.dart';
+import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
 import '../models/pool.dart';
 import '../models/pool_transaction.dart';
@@ -40,16 +41,29 @@ class PoolDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
-  static const Color _screenBg = Color(0xFF17002D);
-  static const Color _cardBg = Color(0xFF22123E);
-  static const Color _cardBgAlt = Color(0xFF271648);
-  static const Color _cardBorder = Color(0xFF4A2F73);
-  static const Color _titleText = Color(0xFFF3EEFF);
-  static const Color _bodyText = Color(0xFFD1C6EB);
-  static const Color _mutedText = Color(0xFFA79BBC);
-  static const Color _inputBg = Color(0xFF312151);
-  static const Color _inputBorder = Color(0xFF6C4AA0);
-  static const Color _accent = Color(0xFFA742D5);
+  ReefThemeColors get _themeColors => context.reefColors;
+  bool get _isDarkTheme => Theme.of(context).brightness == Brightness.dark;
+  Color get _screenBg => _themeColors.deepBackground;
+  Color get _cardBg => _themeColors.cardBackground;
+  Color get _cardBgAlt => _themeColors.cardBackgroundSecondary;
+  Color get _cardBorder => _themeColors.borderColor;
+  Color get _titleText => _themeColors.textPrimary;
+  Color get _bodyText => _themeColors.textSecondary;
+  Color get _mutedText => _themeColors.textMuted;
+  Color get _inputBg => _themeColors.inputFill;
+  Color get _inputBorder => _themeColors.inputBorder;
+  Color get _accent => _themeColors.accent;
+  Color get _swapSurface => _isDarkTheme ? const Color(0xFF251343) : _cardBg;
+  Color get _swapSurfaceAlt =>
+      _isDarkTheme ? const Color(0xFF3C2A5F) : _cardBgAlt;
+  Color get _swapFieldFill => _isDarkTheme ? const Color(0xFF352254) : _inputBg;
+  Color get _swapBorder => _isDarkTheme ? const Color(0xFF4D3478) : _cardBorder;
+  Color get _swapFieldBorder =>
+      _isDarkTheme ? const Color(0xFF7550AB) : _inputBorder;
+  Color get _swapHint => _isDarkTheme ? const Color(0xFFB8AAD6) : _mutedText;
+  Color get _swapButtonDisabled => _isDarkTheme
+      ? const Color(0xFF6C5A92)
+      : _themeColors.textMuted.withOpacity(0.45);
 
   final TextEditingController _amountController = TextEditingController();
   int _quoteRequestId = 0;
@@ -399,18 +413,19 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         appBar: AppBar(
           backgroundColor: _screenBg,
           elevation: 0,
+          centerTitle: true,
           title: Text(
             appBarTitle,
-            style: const TextStyle(
+            style: TextStyle(
               color: _titleText,
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              fontSize: 21,
             ),
           ),
-          iconTheme: const IconThemeData(color: _titleText),
+          iconTheme: IconThemeData(color: _titleText),
         ),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           children: [
             _buildPoolHeaderCard(widget.pool),
             const Gap(14),
@@ -427,8 +442,8 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               const Gap(10),
               Text(
                 _swapError!,
-                style: const TextStyle(
-                  color: Color(0xFFFF6C6C),
+                style: TextStyle(
+                  color: _themeColors.danger,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -437,10 +452,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               const Gap(6),
               Text(
                 'Last tx: ${_shortHash(_lastTxHash!)}',
-                style: const TextStyle(
-                  color: _bodyText,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: _bodyText, fontWeight: FontWeight.w600),
               ),
             ],
           ],
@@ -454,15 +466,16 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       appBar: AppBar(
         backgroundColor: _screenBg,
         elevation: 0,
+        centerTitle: true,
         title: Text(
           appBarTitle,
-          style: const TextStyle(
+          style: TextStyle(
             color: _titleText,
-            fontWeight: FontWeight.w800,
-            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            fontSize: 21,
           ),
         ),
-        iconTheme: const IconThemeData(color: _titleText),
+        iconTheme: IconThemeData(color: _titleText),
       ),
       body: FutureBuilder<List<PoolTransactionEvent>>(
         future: poolService.getPairTransactions(widget.pool.id),
@@ -496,7 +509,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Trade',
             style: TextStyle(
               color: _titleText,
@@ -505,7 +518,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
             ),
           ),
           const Gap(6),
-          const Text(
+          Text(
             'Open swap for this pair in a dedicated screen.',
             style: TextStyle(
               color: _bodyText,
@@ -532,7 +545,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7A3ED5),
+                backgroundColor: _themeColors.accentStrong,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -560,23 +573,25 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [_cardBg, _cardBgAlt],
+          colors: [_swapSurface, _swapSurfaceAlt],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _cardBorder),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _swapBorder),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x660C0418),
-            blurRadius: 16,
-            offset: Offset(0, 8),
+            color: _isDarkTheme
+                ? const Color(0x55070412)
+                : const Color(0x220C0418),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -591,14 +606,14 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                       : null,
                   firstSeed: pool.token0Symbol,
                   secondSeed: pool.token1Symbol,
-                  avatarSize: 40,
-                  overlapOffset: 24,
+                  avatarSize: 48,
+                  overlapOffset: 30,
                   resolveFallbackIcon: true,
                   imageFit: BoxFit.contain,
                   imagePadding: const EdgeInsets.all(4),
                   avatarBackgroundColor: Colors.white,
                 ),
-                const Gap(12),
+                const Gap(14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,20 +622,20 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                         pairTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: _titleText,
                           fontWeight: FontWeight.w900,
-                          fontSize: Styles.fsSectionTitle,
+                          fontSize: 42 / 2,
                           height: 1.05,
                         ),
                       ),
                       const Gap(2),
                       Text(
                         ticker,
-                        style: const TextStyle(
-                          color: _bodyText,
+                        style: TextStyle(
+                          color: _swapHint,
                           fontWeight: FontWeight.w700,
-                          fontSize: Styles.fsCaption,
+                          fontSize: Styles.fsBodyStrong,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -651,7 +666,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
             _rateLine(
               '1 ${pool.token0Symbol} = ${AmountUtils.formatRate(pool.token0Price)} ${pool.token1Symbol}',
             ),
-            const Gap(2),
+            const Gap(3),
             _rateLine(
               '1 ${pool.token1Symbol} = ${AmountUtils.formatRate(pool.token1Price)} ${pool.token0Symbol}',
             ),
@@ -663,18 +678,19 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
 
   Widget _metricTile({required String label, required String value}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: const Color(0x33FFFFFF),
-        borderRadius: BorderRadius.circular(12),
+        color: _swapSurfaceAlt.withOpacity(_isDarkTheme ? 0.88 : 0.7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _swapBorder.withOpacity(0.7), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: _mutedText,
+            style: TextStyle(
+              color: _swapHint,
               fontWeight: FontWeight.w800,
               fontSize: Styles.fsSmall,
             ),
@@ -684,10 +700,10 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: _titleText,
               fontWeight: FontWeight.w900,
-              fontSize: Styles.fsBodyStrong,
+              fontSize: 40 / 2,
               height: 1.0,
             ),
           ),
@@ -701,10 +717,10 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        color: _bodyText,
-        fontWeight: FontWeight.w700,
-        fontSize: Styles.fsBody,
+      style: TextStyle(
+        color: _bodyText.withOpacity(_isDarkTheme ? 0.96 : 1),
+        fontWeight: FontWeight.w800,
+        fontSize: Styles.fsBodyStrong,
       ),
     );
   }
@@ -737,7 +753,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Pool Chart',
               style: TextStyle(
                 color: _titleText,
@@ -760,7 +776,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                   selectedColor: _accent,
-                  backgroundColor: const Color(0xFF301E54),
+                  backgroundColor: _cardBgAlt,
                 );
               }).toList(),
             ),
@@ -774,14 +790,16 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                   onPressed: () => setState(() => _chartTimeframe = frame),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                      color: selected ? _accent : const Color(0xFF5C4588),
+                      color: selected
+                          ? _accent
+                          : _themeColors.borderColor.withOpacity(0.7),
                     ),
                     foregroundColor: selected
-                        ? const Color(0xFFD8C6FF)
+                        ? _themeColors.textSecondary
                         : _bodyText,
                     backgroundColor: selected
-                        ? const Color(0xFF38215C)
-                        : const Color(0x1AFFFFFF),
+                        ? _themeColors.accentStrong.withOpacity(0.3)
+                        : _themeColors.inputFill.withOpacity(0.18),
                     visualDensity: const VisualDensity(
                       horizontal: -3,
                       vertical: -3,
@@ -796,7 +814,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
             SizedBox(
               height: 220,
               child: points.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'No chart data yet.',
                         style: TextStyle(
@@ -816,8 +834,8 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                           show: true,
                           drawVerticalLine: false,
                           horizontalInterval: (chartMaxY - chartMinY) / 4,
-                          getDrawingHorizontalLine: (_) => const FlLine(
-                            color: Color(0x305E4E82),
+                          getDrawingHorizontalLine: (_) => FlLine(
+                            color: _themeColors.borderColor.withOpacity(0.4),
                             strokeWidth: 1,
                           ),
                         ),
@@ -837,7 +855,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                               getTitlesWidget: (value, meta) {
                                 return Text(
                                   _formatChartValue(value),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: _mutedText,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
@@ -860,7 +878,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                                 }
                                 return Text(
                                   _formatChartTime(points[idx].timestamp),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: _mutedText,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
@@ -909,26 +927,27 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     required bool canSwap,
     required bool hasSufficientBalance,
   }) {
+    final isEnabled = requiresApproval ? !_isApproving : canSwap;
     return Container(
       decoration: BoxDecoration(
-        color: _cardBg,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _cardBorder, width: 1),
+        color: _swapSurface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _swapBorder, width: 1),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Swap',
               style: TextStyle(
                 color: _titleText,
                 fontWeight: FontWeight.w900,
-                fontSize: 48 / 2,
+                fontSize: 50 / 2,
               ),
             ),
-            const Gap(12),
+            const Gap(14),
             _tokenRow(asset: inAsset, balance: inBalance),
             const Gap(10),
             TextField(
@@ -936,61 +955,64 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              style: const TextStyle(
+              style: TextStyle(
                 color: _titleText,
-                fontWeight: FontWeight.w800,
-                fontSize: Styles.fsCardTitle,
+                fontWeight: FontWeight.w900,
+                fontSize: 44 / 2,
               ),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: _inputBg,
+                fillColor: _swapFieldFill,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 18,
-                  vertical: 14,
+                  vertical: 16,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: const BorderSide(color: _inputBorder, width: 1.5),
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide(color: _swapFieldBorder, width: 1.6),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: const BorderSide(color: _inputBorder, width: 1.5),
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide(color: _swapFieldBorder, width: 1.6),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: const BorderSide(color: _accent, width: 2),
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide(color: _accent, width: 2),
                 ),
                 hintText: '0.0',
-                hintStyle: const TextStyle(color: _mutedText),
+                hintStyle: TextStyle(
+                  color: _swapHint,
+                  fontWeight: FontWeight.w700,
+                ),
                 suffixIcon: IconButton(
                   onPressed: () {
                     _amountController.text = _maxInputAmount(inBalance);
                   },
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.auto_fix_high_rounded,
                     color: _accent,
-                    size: 30,
+                    size: 28,
                   ),
                 ),
               ),
             ),
-            const Gap(12),
+            const Gap(14),
             Center(
               child: GestureDetector(
                 onTap: _flipPair,
                 child: Container(
-                  width: 52,
-                  height: 52,
+                  width: 56,
+                  height: 56,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
-                      colors: [Color(0xFFA14DE8), Color(0xFF6E31C7)],
+                      colors: [Color(0xFFB84BFF), Color(0xFF6F33D1)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Color(0x66090514),
+                        color: Color(0x55090514),
                         blurRadius: 10,
                         offset: Offset(0, 4),
                       ),
@@ -1011,16 +1033,17 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
-                color: _inputBg,
+                color: _swapSurfaceAlt,
                 borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _swapBorder.withOpacity(0.72)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Estimated Output',
                     style: TextStyle(
-                      color: _mutedText,
+                      color: _swapHint,
                       fontWeight: FontWeight.w800,
                       fontSize: Styles.fsBodyStrong,
                     ),
@@ -1031,20 +1054,20 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                       Expanded(
                         child: Text(
                           _quotedOutDisplay,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: _titleText,
                             fontWeight: FontWeight.w900,
-                            fontSize: Styles.fsSectionTitle,
+                            fontSize: 46 / 2,
                             height: 1.0,
                           ),
                         ),
                       ),
                       Text(
                         outAsset.symbol,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: _bodyText,
                           fontWeight: FontWeight.w800,
-                          fontSize: Styles.fsSectionTitle,
+                          fontSize: 44 / 2,
                           height: 1.0,
                         ),
                       ),
@@ -1053,9 +1076,9 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                 ],
               ),
             ),
-            const Gap(12),
+            const Gap(14),
             if (_isLoadingQuote)
-              const LinearProgressIndicator(minHeight: 2, color: _accent),
+              LinearProgressIndicator(minHeight: 2, color: _accent),
             const Gap(14),
             SizedBox(
               width: double.infinity,
@@ -1064,28 +1087,47 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                     ? (_isApproving ? null : _approveIfNeeded)
                     : (canSwap ? _executeSwap : null),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7A3ED5),
-                  disabledBackgroundColor: const Color(0xFF5F4B84),
+                  backgroundColor: Colors.transparent,
+                  disabledBackgroundColor: Colors.transparent,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  padding: EdgeInsets.zero,
+                  shadowColor: Colors.transparent,
                   elevation: 0,
                 ),
-                child: Text(
-                  requiresApproval
-                      ? (_isApproving
-                            ? 'Approving...'
-                            : 'Approve ${inAsset.symbol}')
-                      : (!hasSufficientBalance
-                            ? 'Insufficient ${inAsset.symbol}'
-                            : (_isSubmittingSwap
-                                  ? 'Swapping...'
-                                  : 'Confirm Swap')),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 40 / 2,
+                child: Ink(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    color: isEnabled ? null : _swapButtonDisabled,
+                    gradient: isEnabled
+                        ? const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Color(0xFFBE37A8), Color(0xFF6E35D4)],
+                          )
+                        : null,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Text(
+                      requiresApproval
+                          ? (_isApproving
+                                ? 'Approving...'
+                                : 'Approve ${inAsset.symbol}')
+                          : (!hasSufficientBalance
+                                ? 'Insufficient ${inAsset.symbol}'
+                                : (_isSubmittingSwap
+                                      ? 'Swapping...'
+                                      : 'Confirm Swap')),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(isEnabled ? 1 : 0.92),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1104,14 +1146,14 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: _inputBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF49346F), width: 1),
+        color: _swapSurfaceAlt,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _swapBorder.withOpacity(0.8), width: 1.1),
       ),
       child: Row(
         children: [
           TokenAvatar(
-            size: 42,
+            size: 48,
             iconUrl: asset.iconUrl,
             fallbackSeed: asset.symbol,
             resolveFallbackIcon: true,
@@ -1124,26 +1166,30 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
           Expanded(
             child: Text(
               asset.symbol,
-              style: const TextStyle(
+              style: TextStyle(
                 color: _titleText,
                 fontWeight: FontWeight.w900,
-                fontSize: 44 / 2,
+                fontSize: 46 / 2,
               ),
             ),
           ),
           SizedBox(
-            width: 150,
+            width: 170,
             child: BlurableContent(
               showContent: showBalance,
-              child: Text(
-                '${AmountUtils.formatCompactToken(balance)} ${asset.symbol}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: _bodyText,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
+              child: FittedBox(
+                alignment: Alignment.centerRight,
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${AmountUtils.formatCompactToken(balance)} ${asset.symbol}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: _bodyText,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 42 / 2,
+                  ),
                 ),
               ),
             ),

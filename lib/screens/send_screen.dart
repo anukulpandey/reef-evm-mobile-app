@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../core/config/dex_config.dart';
+import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
 import '../l10n/app_localizations.dart';
 import '../models/token.dart';
@@ -209,6 +210,31 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     ];
   }
 
+  InputDecoration _embeddedFieldDecoration({
+    required String hintText,
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(
+      horizontal: 12,
+      vertical: 2,
+    ),
+    BoxConstraints? constraints,
+  }) {
+    return InputDecoration(
+      isDense: true,
+      filled: false,
+      fillColor: Colors.transparent,
+      constraints: constraints,
+      contentPadding: contentPadding,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+      hintText: hintText,
+      hintStyle: const TextStyle(color: Styles.textLightColor),
+    );
+  }
+
   Future<void> _fillAddressFromClipboard() async {
     final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
     final raw = clipboard?.text?.trim() ?? '';
@@ -275,56 +301,71 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
     final selected = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Styles.primaryBackgroundColor,
+      isScrollControlled: true,
+      backgroundColor: context.reefColors.pageBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
+        final colors = context.reefColors;
+        final maxHeight = MediaQuery.of(context).size.height * 0.72;
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  AppLocalizations.of(context).selectAccount,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Styles.textColor,
+          top: false,
+          child: SizedBox(
+            height: maxHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                children: [
+                  Text(
+                    AppLocalizations.of(context).selectAccount,
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
                   ),
-                ),
-                const Gap(10),
-                for (final account in accounts)
-                  FutureBuilder<String?>(
-                    future: walletService.getAccountName(account),
-                    builder: (context, snapshot) {
-                      final label = (snapshot.data ?? '').trim();
-                      final display = label.isEmpty
-                          ? AddressUtils.shorten(account)
-                          : label;
-                      return ListTile(
-                        onTap: () => Navigator.of(context).pop(account),
-                        leading: const Icon(
-                          Icons.account_balance_wallet_rounded,
-                          color: Styles.primaryAccentColor,
-                        ),
-                        title: Text(
-                          display,
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            color: Styles.textColor,
-                          ),
-                        ),
-                        subtitle: Text(
-                          AddressUtils.shorten(account),
-                          style: const TextStyle(color: Styles.textLightColor),
-                        ),
-                      );
-                    },
+                  const Gap(10),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: accounts.length,
+                      physics: const BouncingScrollPhysics(),
+                      itemBuilder: (context, index) {
+                        final account = accounts[index];
+                        return FutureBuilder<String?>(
+                          future: walletService.getAccountName(account),
+                          builder: (context, snapshot) {
+                            final label = (snapshot.data ?? '').trim();
+                            final display = label.isEmpty
+                                ? AddressUtils.shorten(account)
+                                : label;
+                            return ListTile(
+                              onTap: () => Navigator.of(context).pop(account),
+                              leading: Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: colors.accent,
+                              ),
+                              title: Text(
+                                display,
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                              subtitle: Text(
+                                AddressUtils.shorten(account),
+                                style: TextStyle(color: colors.textMuted),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      separatorBuilder: (_, __) => const SizedBox(height: 4),
+                    ),
                   ),
-                const Gap(8),
-              ],
+                  const Gap(8),
+                ],
+              ),
             ),
           ),
         );
@@ -535,14 +576,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                       ? Styles.textLightColor
                       : Styles.textColor,
                 ),
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 2,
-                  ),
-                  border: InputBorder.none,
+                decoration: _embeddedFieldDecoration(
                   hintText: l10n.recipientAddress,
-                  hintStyle: const TextStyle(color: Styles.textLightColor),
                 ),
               ),
             ),
@@ -669,21 +704,13 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                       ? Styles.textLightColor
                       : Styles.textColor,
                 ),
-                decoration: const InputDecoration(
-                  constraints: BoxConstraints(maxHeight: 32),
-                  contentPadding: EdgeInsets.symmetric(
+                decoration: _embeddedFieldDecoration(
+                  hintText: '0.0',
+                  constraints: const BoxConstraints(maxHeight: 32),
+                  contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.transparent),
-                  ),
-                  border: OutlineInputBorder(),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.transparent),
-                  ),
-                  hintText: '0.0',
-                  hintStyle: TextStyle(color: Styles.textLightColor),
                 ),
                 textAlign: TextAlign.right,
               ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 
 import '../../core/config/dex_config.dart';
+import '../../core/theme/reef_theme_colors.dart';
 import '../../core/theme/styles.dart';
 import '../../models/token.dart';
 import '../../models/transaction_preview.dart';
@@ -12,6 +13,7 @@ import '../../providers/service_providers.dart';
 import '../../providers/wallet_provider.dart';
 import '../../screens/transaction_confirmation_screen.dart';
 import '../../utils/amount_utils.dart';
+import '../common/token_avatar.dart';
 
 class CreatePoolSheet extends ConsumerStatefulWidget {
   const CreatePoolSheet({
@@ -28,7 +30,8 @@ class CreatePoolSheet extends ConsumerStatefulWidget {
 }
 
 class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
-  static const String _zeroAddress = '0x0000000000000000000000000000000000000000';
+  static const String _zeroAddress =
+      '0x0000000000000000000000000000000000000000';
   final TextEditingController _amountAController = TextEditingController();
   final TextEditingController _amountBController = TextEditingController();
 
@@ -36,6 +39,9 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
   Token? _tokenA;
   Token? _tokenB;
   bool _isSubmitting = false;
+  bool _isResolvingPair = false;
+  bool? _poolExists;
+  String? _resolvedPairAddress;
   String? _errorText;
 
   @override
@@ -44,9 +50,13 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     _tokenOptions = _dedupeTokens(widget.portfolioTokens);
     if (_tokenOptions.isNotEmpty) {
       _tokenA = _tokenOptions.first;
-      _tokenB =
-          _tokenOptions.length > 1 ? _tokenOptions[1] : _tokenOptions.first;
+      _tokenB = _tokenOptions.length > 1
+          ? _tokenOptions[1]
+          : _tokenOptions.first;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshPoolState();
+    });
   }
 
   @override
@@ -58,8 +68,11 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
+    final actionLabel = _actionButtonLabel;
     final canCreate =
         !_isSubmitting &&
+        !_isResolvingPair &&
         _tokenA != null &&
         _tokenB != null &&
         _tokenOptions.length >= 2;
@@ -67,8 +80,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     return SafeArea(
       top: false,
       child: Container(
-        decoration: const BoxDecoration(
-          color: Styles.primaryBackgroundColor,
+        decoration: BoxDecoration(
+          color: colors.pageBackground,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: EdgeInsets.only(
@@ -84,18 +97,20 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Create Pool',
+                  Text(
+                    actionLabel,
                     style: TextStyle(
-                      color: Styles.textColor,
+                      color: colors.textPrimary,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const Spacer(),
                   IconButton(
-                    onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, color: Styles.textColor),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: colors.textPrimary),
                   ),
                 ],
               ),
@@ -103,10 +118,12 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
               _tokenDropdown(
                 title: 'Token A',
                 value: _tokenA,
-                onChanged: (next) {
+                onChanged: (next) async {
                   if (next == null) return;
                   setState(() {
                     _tokenA = next;
+                    _poolExists = null;
+                    _resolvedPairAddress = null;
                     if (_isSameToken(_tokenA!, _tokenB)) {
                       _tokenB = _tokenOptions.firstWhere(
                         (token) => !_isSameToken(token, _tokenA),
@@ -114,21 +131,21 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
                       );
                     }
                   });
+                  await _refreshPoolState();
                 },
               ),
               const Gap(10),
-              _amountField(
-                label: 'Amount A',
-                controller: _amountAController,
-              ),
+              _amountField(label: 'Amount A', controller: _amountAController),
               const Gap(12),
               _tokenDropdown(
                 title: 'Token B',
                 value: _tokenB,
-                onChanged: (next) {
+                onChanged: (next) async {
                   if (next == null) return;
                   setState(() {
                     _tokenB = next;
+                    _poolExists = null;
+                    _resolvedPairAddress = null;
                     if (_isSameToken(_tokenA!, _tokenB)) {
                       _tokenA = _tokenOptions.firstWhere(
                         (token) => !_isSameToken(token, _tokenB),
@@ -136,30 +153,57 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
                       );
                     }
                   });
+                  await _refreshPoolState();
                 },
               ),
               const Gap(10),
-              _amountField(
-                label: 'Amount B',
-                controller: _amountBController,
-              ),
+              _amountField(label: 'Amount B', controller: _amountBController),
               const Gap(10),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.45),
+                  color: colors.cardBackground.withOpacity(0.55),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
-                  'If pool does not exist, pair creation and token approvals may be submitted before adding liquidity.',
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_isResolvingPair) ...[
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.accentStrong,
+                        ),
+                      ),
+                      const Gap(8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        _statusBannerText,
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_resolvedPairAddress != null && _poolExists == true) ...[
+                const Gap(8),
+                Text(
+                  'Existing pair: ${_shortAddress(_resolvedPairAddress!)}',
                   style: TextStyle(
-                    color: Styles.textLightColor,
+                    color: colors.textMuted,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
                 ),
-              ),
+              ],
               if (_errorText != null) ...[
                 const Gap(8),
                 Text(
@@ -181,8 +225,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: canCreate
-                        ? Styles.secondaryAccentColorDark
-                        : const Color(0xFFCBC6D9),
+                        ? colors.accentStrong
+                        : colors.textMuted.withOpacity(0.4),
                   ),
                   child: _isSubmitting
                       ? const SizedBox(
@@ -193,9 +237,9 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
                             strokeWidth: 2.2,
                           ),
                         )
-                      : const Text(
-                          'Create Pool',
-                          style: TextStyle(
+                      : Text(
+                          actionLabel,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 16,
@@ -215,13 +259,14 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     required Token? value,
     required ValueChanged<Token?> onChanged,
   }) {
+    final colors = context.reefColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
-            color: Styles.textLightColor,
+          style: TextStyle(
+            color: colors.textSecondary,
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
@@ -230,30 +275,46 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
         DropdownButtonFormField<Token>(
           value: value,
           isExpanded: true,
+          isDense: false,
+          itemHeight: null,
+          menuMaxHeight: 280,
+          alignment: AlignmentDirectional.centerStart,
+          dropdownColor: colors.cardBackground,
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+          iconEnabledColor: colors.textSecondary,
+          iconDisabledColor: colors.textMuted,
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.white,
+            fillColor: colors.inputFill,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 16,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFD0C9E0)),
+              borderSide: BorderSide(color: colors.inputBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFD0C9E0)),
+              borderSide: BorderSide(color: colors.inputBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colors.accentStrong, width: 1.5),
             ),
           ),
+          selectedItemBuilder: (context) => _tokenOptions
+              .map((token) => _buildTokenOptionRow(token: token, compact: true))
+              .toList(),
           items: _tokenOptions
               .map(
                 (token) => DropdownMenuItem<Token>(
                   value: token,
-                  child: Text(
-                    _tokenLabel(token),
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Styles.textColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: _buildTokenOptionRow(token: token),
                 ),
               )
               .toList(),
@@ -263,31 +324,179 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     );
   }
 
+  Widget _buildTokenOptionRow({required Token token, bool compact = false}) {
+    final colors = context.reefColors;
+    final title = _tokenLabel(token);
+    final subtitle = _tokenOptionSubtitle(token);
+    final symbol = token.symbol.trim().isEmpty ? 'TOKEN' : token.symbol.trim();
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          TokenAvatar(
+            size: compact ? 24 : 28,
+            iconUrl: token.iconUrl,
+            fallbackSeed: symbol,
+            resolveFallbackIcon: true,
+            useDeterministicFallback: true,
+            avatarBackgroundColor: colors.cardBackgroundSecondary,
+            badgeText: symbol.toUpperCase() == 'WETH' ? 'W' : null,
+          ),
+          Gap(compact ? 8 : 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: compact ? 15 : 16,
+                    height: 1.1,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  Gap(compact ? 1 : 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors.textMuted,
+                      fontSize: compact ? 11 : 12,
+                      height: 1.1,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _amountField({
     required String label,
     required TextEditingController controller,
   }) {
+    final colors = context.reefColors;
     return TextField(
       controller: controller,
       enabled: !_isSubmitting,
+      style: TextStyle(
+        color: colors.textPrimary,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+      ),
+      cursorColor: colors.accentStrong,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: TextStyle(
+          color: colors.textMuted,
+          fontWeight: FontWeight.w600,
+        ),
+        floatingLabelStyle: TextStyle(
+          color: colors.accentStrong,
+          fontWeight: FontWeight.w700,
+        ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: colors.inputFill,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD0C9E0)),
+          borderSide: BorderSide(color: colors.inputBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD0C9E0)),
+          borderSide: BorderSide(color: colors.inputBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.accentStrong, width: 1.5),
         ),
       ),
     );
+  }
+
+  String get _actionButtonLabel {
+    if (_poolExists == true) return 'Add Liquidity';
+    return 'Create Pool';
+  }
+
+  String get _statusBannerText {
+    if (_tokenA == null || _tokenB == null) {
+      return 'Select both tokens to check whether this pool already exists.';
+    }
+    if (_poolExists == true) {
+      return 'Pool already exists. Liquidity will be added to the existing pair instead of creating a new pool.';
+    }
+    if (_poolExists == false) {
+      return 'Pool does not exist yet. Pair creation and token approvals may be submitted before adding liquidity.';
+    }
+    if (_isResolvingPair) {
+      return 'Checking whether the selected pool already exists...';
+    }
+    return 'Select both tokens to check whether this pool already exists.';
+  }
+
+  Future<void> _refreshPoolState() async {
+    final tokenA = _tokenA;
+    final tokenB = _tokenB;
+    if (tokenA == null || tokenB == null) return;
+
+    if (_isSameToken(tokenA, tokenB)) {
+      if (!mounted) return;
+      setState(() {
+        _poolExists = null;
+        _resolvedPairAddress = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isResolvingPair = true;
+      _errorText = null;
+    });
+
+    try {
+      final resolution = await _resolvePoolState(
+        tokenA: tokenA,
+        tokenB: tokenB,
+      );
+      if (!mounted || tokenA != _tokenA || tokenB != _tokenB) return;
+      setState(() {
+        _poolExists = resolution.exists;
+        _resolvedPairAddress = resolution.pairAddress;
+      });
+    } catch (error) {
+      debugPrint('[create_pool][pair_check_error] $error');
+      if (!mounted) return;
+      setState(() {
+        _poolExists = null;
+        _resolvedPairAddress = null;
+        _errorText = 'Unable to check whether this pool already exists.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResolvingPair = false;
+        });
+      }
+    }
   }
 
   Future<void> _onCreatePoolPressed() async {
@@ -307,6 +516,24 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       setState(() => _errorText = 'Token A and Token B must be different.');
       return;
     }
+
+    late final _PoolResolution poolState;
+    try {
+      poolState = await _resolvePoolState(tokenA: tokenA, tokenB: tokenB);
+    } catch (error) {
+      debugPrint('[create_pool][pair_check_before_submit_error] $error');
+      if (mounted) {
+        setState(() {
+          _errorText = 'Unable to confirm whether this pool already exists.';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _poolExists = poolState.exists;
+      _resolvedPairAddress = poolState.pairAddress;
+    });
 
     final amountAText = _amountAController.text.trim();
     final amountBText = _amountBController.text.trim();
@@ -338,6 +565,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       amountBText: amountBText,
       rawA: rawA,
       rawB: rawB,
+      poolExists: poolState.exists,
+      pairAddress: poolState.pairAddress,
     );
     if (!mounted) return;
 
@@ -345,7 +574,9 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       MaterialPageRoute(
         builder: (_) => TransactionConfirmationScreen(
           preview: preview,
-          approveButtonText: 'Approve & Create',
+          approveButtonText: poolState.exists
+              ? 'Approve & Add Liquidity'
+              : 'Approve & Create',
           rejectButtonText: 'Reject',
           onApprove: () async {
             if (mounted) {
@@ -381,7 +612,9 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Pool creation submitted: ${result.txHash!.substring(0, 10)}...'),
+        content: Text(
+          '${poolState.exists ? 'Liquidity add' : 'Pool creation'} submitted: ${result.txHash!.substring(0, 10)}...',
+        ),
       ),
     );
     Navigator.of(context).pop(true);
@@ -395,14 +628,13 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     required String amountBText,
     required BigInt rawA,
     required BigInt rawB,
+    required bool poolExists,
+    required String? pairAddress,
   }) async {
     final web3 = ref.read(web3ServiceProvider);
     final chainId = await web3.getChainId();
     final gasPriceWei = await web3.getGasPriceWei();
-    final hasNativeSide = _isNative(tokenA) || _isNative(tokenB);
-    final gasLimit = hasNativeSide
-        ? web3.addLiquidityEthGasLimit
-        : web3.addLiquidityGasLimit;
+    final gasLimit = web3.addLiquidityGasLimit;
     final feeWei = gasPriceWei * BigInt.from(gasLimit);
     final feeDisplay = AmountUtils.formatInputAmount(
       AmountUtils.parseNumeric(web3.formatAmountFromRaw(feeWei, 18)),
@@ -410,23 +642,38 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     );
 
     return TransactionPreview(
-      title: 'Create Pool',
-      methodName: hasNativeSide ? 'addLiquidityETH' : 'addLiquidity',
+      title: poolExists ? 'Add Liquidity' : 'Create Pool',
+      methodName: 'addLiquidity',
       recipientAddress: accountAddress,
       amountDisplay:
           '$amountAText ${tokenA.symbol.toUpperCase()} + $amountBText ${tokenB.symbol.toUpperCase()}',
-      networkName: chainId == DexConfig.defaultChainId ? 'Reef' : 'Chain $chainId',
+      networkName: chainId == DexConfig.defaultChainId
+          ? 'Reef'
+          : 'Chain $chainId',
       chainId: chainId,
       contractAddress: DexConfig.routerAddress,
       gasLimit: gasLimit,
       gasPriceWei: gasPriceWei,
       estimatedFeeDisplay: '$feeDisplay REEF',
-      calldataHex: hasNativeSide ? '0xf305d719…' : '0xe8e33700…',
+      calldataHex: '0xe8e33700…',
       fields: <TransactionPreviewField>[
+        if (pairAddress != null && poolExists)
+          TransactionPreviewField(label: 'Pair', value: pairAddress),
+        if (_isNative(tokenA) || _isNative(tokenB))
+          const TransactionPreviewField(
+            label: 'Native handling',
+            value: 'REEF is wrapped to WREEF before adding liquidity.',
+          ),
         TransactionPreviewField(label: 'Token A', value: _tokenLabel(tokenA)),
         TransactionPreviewField(label: 'Token B', value: _tokenLabel(tokenB)),
-        TransactionPreviewField(label: 'Amount A (raw)', value: rawA.toString()),
-        TransactionPreviewField(label: 'Amount B (raw)', value: rawB.toString()),
+        TransactionPreviewField(
+          label: 'Amount A (raw)',
+          value: rawA.toString(),
+        ),
+        TransactionPreviewField(
+          label: 'Amount B (raw)',
+          value: rawB.toString(),
+        ),
         const TransactionPreviewField(
           label: 'Router',
           value: DexConfig.routerAddress,
@@ -459,6 +706,12 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       throw Exception('Cannot create pool with two native tokens');
     }
 
+    final normalizedTokenA = _factoryPairTokenAddress(tokenA);
+    final normalizedTokenB = _factoryPairTokenAddress(tokenB);
+    if (normalizedTokenA.toLowerCase() == normalizedTokenB.toLowerCase()) {
+      throw Exception('Token A and Token B resolve to the same pool token.');
+    }
+
     final deadline = BigInt.from(
       DateTime.now().millisecondsSinceEpoch ~/ 1000 +
           (DexConfig.defaultDeadlineMinutes * 60),
@@ -485,62 +738,130 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       await web3.waitForReceipt(approveHash);
     }
 
-    if (tokenAIsNative || tokenBIsNative) {
-      final nativeRaw = tokenAIsNative ? rawA : rawB;
-      final erc20Token = tokenAIsNative ? tokenB : tokenA;
-      final erc20Raw = tokenAIsNative ? rawB : rawA;
-      await ensureAllowance(token: erc20Token, amount: erc20Raw);
-      return web3.addLiquidityEth(
-        account: account,
-        routerAddress: DexConfig.routerAddress,
-        tokenAddress: erc20Token.address,
-        amountTokenDesired: erc20Raw,
-        amountTokenMin: BigInt.zero,
-        amountEthMin: BigInt.zero,
-        to: accountAddress,
-        deadline: deadline,
-        amountEthDesired: nativeRaw,
+    Future<void> ensureWrappedNativeBalance(BigInt requiredAmount) async {
+      if (requiredAmount <= BigInt.zero) return;
+      final wrappedBalance = await web3.getErc20BalanceRaw(
+        tokenAddress: DexConfig.wrappedReefAddress,
+        owner: account.address,
       );
+      if (wrappedBalance >= requiredAmount) return;
+
+      final wrapAmount = requiredAmount - wrappedBalance;
+      final wrapHash = await web3.wrapNative(
+        account: account,
+        wrappedTokenAddress: DexConfig.wrappedReefAddress,
+        amountWei: wrapAmount,
+      );
+      await web3.waitForReceipt(wrapHash);
     }
 
-    await ensureAllowance(token: tokenA, amount: rawA);
-    await ensureAllowance(token: tokenB, amount: rawB);
+    Future<String> resolveOrCreatePair() async {
+      var pairAddress = await web3.getPairAddress(
+        factoryAddress: DexConfig.factoryAddress,
+        tokenA: normalizedTokenA,
+        tokenB: normalizedTokenB,
+      );
+      if (pairAddress.trim().toLowerCase() != _zeroAddress) {
+        return pairAddress;
+      }
 
-    var pairAddress = await web3.getPairAddress(
-      factoryAddress: DexConfig.factoryAddress,
-      tokenA: tokenA.address,
-      tokenB: tokenB.address,
-    );
-    if (pairAddress.trim().toLowerCase() == _zeroAddress) {
       final createPairHash = await web3.createPair(
         account: account,
         factoryAddress: DexConfig.factoryAddress,
-        tokenA: tokenA.address,
-        tokenB: tokenB.address,
+        tokenA: normalizedTokenA,
+        tokenB: normalizedTokenB,
       );
       await web3.waitForReceipt(createPairHash);
       pairAddress = await web3.getPairAddress(
         factoryAddress: DexConfig.factoryAddress,
-        tokenA: tokenA.address,
-        tokenB: tokenB.address,
+        tokenA: normalizedTokenA,
+        tokenB: normalizedTokenB,
       );
       if (pairAddress.trim().toLowerCase() == _zeroAddress) {
         throw Exception('Failed to create pair for selected tokens');
       }
+      return pairAddress;
     }
 
-    return web3.addLiquidity(
-      account: account,
-      routerAddress: DexConfig.routerAddress,
-      tokenA: tokenA.address,
-      tokenB: tokenB.address,
-      amountADesired: rawA,
-      amountBDesired: rawB,
-      amountAMin: BigInt.zero,
-      amountBMin: BigInt.zero,
-      to: accountAddress,
-      deadline: deadline,
+    Future<String> addLiquidityViaPairMint() async {
+      final pairAddress = await resolveOrCreatePair();
+      final transferAHash = await web3.transferErc20Raw(
+        account: account,
+        tokenAddress: normalizedTokenA,
+        to: pairAddress,
+        amount: rawA,
+      );
+      await web3.waitForReceipt(transferAHash);
+      final transferBHash = await web3.transferErc20Raw(
+        account: account,
+        tokenAddress: normalizedTokenB,
+        to: pairAddress,
+        amount: rawB,
+      );
+      await web3.waitForReceipt(transferBHash);
+      return web3.mintPair(
+        account: account,
+        pairAddress: pairAddress,
+        to: accountAddress,
+      );
+    }
+
+    if (tokenAIsNative) {
+      await ensureWrappedNativeBalance(rawA);
+    }
+    if (tokenBIsNative) {
+      await ensureWrappedNativeBalance(rawB);
+    }
+
+    await ensureAllowance(
+      token: tokenAIsNative
+          ? Token(
+              symbol: 'WREEF',
+              name: 'Wrapped Reef',
+              address: DexConfig.wrappedReefAddress,
+              balance: '0',
+              decimals: 18,
+            )
+          : tokenA,
+      amount: rawA,
     );
+    await ensureAllowance(
+      token: tokenBIsNative
+          ? Token(
+              symbol: 'WREEF',
+              name: 'Wrapped Reef',
+              address: DexConfig.wrappedReefAddress,
+              balance: '0',
+              decimals: 18,
+            )
+          : tokenB,
+      amount: rawB,
+    );
+
+    final hasRouterCode = await web3.hasContractCode(DexConfig.routerAddress);
+    if (hasRouterCode) {
+      try {
+        return await web3.addLiquidity(
+          account: account,
+          routerAddress: DexConfig.routerAddress,
+          tokenA: normalizedTokenA,
+          tokenB: normalizedTokenB,
+          amountADesired: rawA,
+          amountBDesired: rawB,
+          amountAMin: BigInt.zero,
+          amountBMin: BigInt.zero,
+          to: accountAddress,
+          deadline: deadline,
+        );
+      } catch (error) {
+        if (_looksLikeUserRejection(error)) rethrow;
+        debugPrint('[create_pool][router_add_fallback] error=$error');
+      }
+      return addLiquidityViaPairMint();
+    }
+
+    debugPrint('[create_pool][router_missing] using direct pair mint fallback');
+    return addLiquidityViaPairMint();
   }
 
   List<Token> _dedupeTokens(List<Token> tokens) {
@@ -553,8 +874,7 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
   }
 
   static String _tokenIdentity(Token token) {
-    if (_isNative(token)) return 'native';
-    return token.address.trim().toLowerCase();
+    return _factoryPairTokenAddress(token).trim().toLowerCase();
   }
 
   static bool _isSameToken(Token a, Token? b) {
@@ -572,7 +892,71 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     final symbol = token.symbol.trim().isEmpty ? 'TOKEN' : token.symbol.trim();
     if (_isNative(token)) return '$symbol (Native)';
     final address = token.address.trim();
-    final short = address.length > 8 ? '${address.substring(0, 8)}...' : address;
+    final short = address.length > 8
+        ? '${address.substring(0, 8)}...'
+        : address;
     return '$symbol ($short)';
   }
+
+  static String? _tokenOptionSubtitle(Token token) {
+    if (_isNative(token)) return token.name.trim().isEmpty ? null : token.name;
+    final address = token.address.trim();
+    if (address.isEmpty) return null;
+    if (address.length <= 12) return address;
+    return '${address.substring(0, 6)}...${address.substring(address.length - 4)}';
+  }
+
+  static String _shortAddress(String address) {
+    final value = address.trim();
+    if (value.length <= 12) return value;
+    return '${value.substring(0, 6)}...${value.substring(value.length - 4)}';
+  }
+
+  Future<_PoolResolution> _resolvePoolState({
+    required Token tokenA,
+    required Token tokenB,
+  }) async {
+    if (_isSameToken(tokenA, tokenB)) {
+      return const _PoolResolution(exists: false, pairAddress: null);
+    }
+
+    if (_isNative(tokenA) && _isNative(tokenB)) {
+      return const _PoolResolution(exists: false, pairAddress: null);
+    }
+
+    final web3 = ref.read(web3ServiceProvider);
+    final resolvedTokenA = _factoryPairTokenAddress(tokenA);
+    final resolvedTokenB = _factoryPairTokenAddress(tokenB);
+    final pairAddress = await web3.getPairAddress(
+      factoryAddress: DexConfig.factoryAddress,
+      tokenA: resolvedTokenA,
+      tokenB: resolvedTokenB,
+    );
+    final normalized = pairAddress.trim().toLowerCase();
+    if (normalized.isEmpty || normalized == _zeroAddress) {
+      return const _PoolResolution(exists: false, pairAddress: null);
+    }
+    return _PoolResolution(exists: true, pairAddress: pairAddress);
+  }
+
+  static String _factoryPairTokenAddress(Token token) {
+    if (_isNative(token)) return DexConfig.wrappedReefAddress;
+    return token.address;
+  }
+
+  static bool _looksLikeUserRejection(Object error) {
+    final normalized = error.toString().toLowerCase();
+    return normalized.contains('rejected before broadcast') ||
+        normalized.contains('transaction rejected') ||
+        normalized.contains('cancelled by user') ||
+        normalized.contains('canceled by user') ||
+        normalized.contains('user rejected');
+  }
+}
+
+class _PoolResolution {
+  const _PoolResolution({required this.exists, this.pairAddress});
+
+  final bool exists;
+  final String? pairAddress;
 }

@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/locale_provider.dart';
+import 'providers/settings_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_service.dart';
 
@@ -30,10 +31,13 @@ class ReefWalletApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final localeState = ref.watch(localeProvider);
+    final settingsState = ref.watch(settingsProvider);
     return MaterialApp(
       title: 'Reef Wallet',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: settingsState.themeMode,
       locale: localeState.locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[

@@ -4,7 +4,7 @@ import 'home_screen.dart';
 import 'wallet_screen.dart';
 import 'pools_screen.dart';
 import 'settings_screen.dart';
-import '../core/theme/styles.dart';
+import '../core/theme/reef_theme_colors.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/navigation_provider.dart';
 
@@ -28,17 +28,18 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final currentIndex = ref.watch(navigationTabProvider);
+    final colors = context.reefColors;
     return Scaffold(
       body: IndexedStack(index: currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: (index) =>
             ref.read(navigationTabProvider.notifier).setIndex(index),
-        backgroundColor: Styles.whiteColor,
+        backgroundColor: colors.navBackground,
         showSelectedLabels: false,
         showUnselectedLabels: false,
-        selectedItemColor: Styles.purpleColor,
-        unselectedItemColor: Colors.black38,
+        selectedItemColor: colors.accent,
+        unselectedItemColor: colors.navUnselected,
         type: BottomNavigationBarType.fixed,
         items: [
           BottomNavigationBarItem(

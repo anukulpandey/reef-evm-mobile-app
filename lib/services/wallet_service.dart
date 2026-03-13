@@ -1,9 +1,6 @@
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:web3dart/web3dart.dart';
 import 'package:hex/hex.dart';
-import 'package:ed25519_edwards/ed25519_edwards.dart'
-    as ed; // or use web3dart logic
-import 'dart:typed_data';
 import '../models/account.dart';
 import 'secure_storage_service.dart';
 
@@ -13,42 +10,69 @@ class WalletService {
   WalletService(this._storageService);
 
   Future<Account> createWallet() async {
-    // Generate Mnemonic
-    String mnemonic = bip39.generateMnemonic();
-    return importFromMnemonic(mnemonic);
+    final draft = await createWalletDraft();
+    await persistAccount(draft);
+    return draft;
+  }
+
+  Future<Account> createWalletDraft() async {
+    final mnemonic = bip39.generateMnemonic();
+    return deriveAccountFromMnemonic(mnemonic);
   }
 
   Future<Account> importFromMnemonic(String mnemonic) async {
+    final account = deriveAccountFromMnemonic(mnemonic);
+    await persistAccount(account);
+    return account;
+  }
+
+  Account deriveAccountFromMnemonic(String mnemonic) {
     if (!bip39.validateMnemonic(mnemonic)) {
       throw Exception("Invalid mnemonic phrase");
     }
 
-    // Seed from mnemonic
     final seed = bip39.mnemonicToSeed(mnemonic);
-    // Simple derivation for example purposes (ideally use a BIP44 library for full paths)
-    // For now, we take the first 32 bytes of seed as private key
     final privateKey = HEX.encode(seed.sublist(0, 32));
-
-    return importFromPrivateKey(privateKey, mnemonic: mnemonic);
+    return deriveAccountFromPrivateKey(privateKey, mnemonic: mnemonic);
   }
 
   Future<Account> importFromPrivateKey(
     String privateKey, {
     String mnemonic = '',
   }) async {
-    // Ensure PK format
-    String cleanPk = privateKey;
+    final account = deriveAccountFromPrivateKey(privateKey, mnemonic: mnemonic);
+    await persistAccount(account);
+    return account;
+  }
+
+  Account deriveAccountFromPrivateKey(
+    String privateKey, {
+    String mnemonic = '',
+  }) {
+    final cleanPk = normalizePrivateKey(privateKey);
+    final credentials = EthPrivateKey.fromHex(cleanPk);
+    final address = credentials.address.hex;
+    return Account(address: address, privateKey: cleanPk, mnemonic: mnemonic);
+  }
+
+  Future<void> persistAccount(Account account, {String? name}) async {
+    await _storageService.saveAccount(
+      account.address,
+      account.privateKey,
+      mnemonic: account.mnemonic,
+    );
+    final trimmedName = name?.trim() ?? '';
+    if (trimmedName.isNotEmpty) {
+      await _storageService.saveAccountName(account.address, trimmedName);
+    }
+  }
+
+  String normalizePrivateKey(String privateKey) {
+    var cleanPk = privateKey.trim();
     if (cleanPk.startsWith('0x')) {
       cleanPk = cleanPk.substring(2);
     }
-
-    final credentials = EthPrivateKey.fromHex(cleanPk);
-    final address = credentials.address.hex;
-
-    // Save to secure storage
-    await _storageService.saveAccount(address, cleanPk, mnemonic: mnemonic);
-
-    return Account(address: address, privateKey: cleanPk, mnemonic: mnemonic);
+    return cleanPk;
   }
 
   Future<List<String>> getAccounts() async {

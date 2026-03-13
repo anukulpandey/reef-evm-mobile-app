@@ -175,7 +175,10 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                   if (_hasPassword) ...[
                     _label(l10n.enterAppPassword),
                     const Gap(8),
-                    _PasswordInput(controller: _currentPasswordController),
+                    _PasswordInput(
+                      controller: _currentPasswordController,
+                      hintText: l10n.enterAppPassword,
+                    ),
                     const Gap(12),
                   ],
                   _label(l10n.newPassword.toUpperCase()),
@@ -183,6 +186,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                   _PasswordInput(
                     controller: _newPasswordController,
                     showErrorBorder: _newPasswordError,
+                    hintText: l10n.newPassword,
                   ),
                   if (_newPasswordError) ...[
                     const Gap(8),
@@ -195,6 +199,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                     _PasswordInput(
                       controller: _confirmPasswordController,
                       showErrorBorder: _confirmPasswordError,
+                      hintText: l10n.repeatPasswordForVerification,
                     ),
                     if (_confirmPasswordError) ...[
                       const Gap(8),
@@ -239,9 +244,10 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
     return Text(
       text,
       style: const TextStyle(
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: FontWeight.w500,
-        color: Styles.textLightColor,
+        color: Color(0xFFC4B8E6),
+        letterSpacing: 0.2,
       ),
     );
   }
@@ -267,36 +273,73 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
   }
 }
 
-class _PasswordInput extends StatelessWidget {
+class _PasswordInput extends StatefulWidget {
   const _PasswordInput({
     required this.controller,
     this.showErrorBorder = false,
+    this.hintText = 'Enter password',
   });
 
   final TextEditingController controller;
   final bool showErrorBorder;
+  final String hintText;
+
+  @override
+  State<_PasswordInput> createState() => _PasswordInputState();
+}
+
+class _PasswordInputState extends State<_PasswordInput> {
+  bool _obscure = true;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: showErrorBorder ? Styles.errorColor : const Color(0x20000000),
+          color: widget.showErrorBorder
+              ? Styles.errorColor
+              : const Color(0xFFCDC3E4),
           width: 1,
         ),
       ),
       child: TextField(
-        controller: controller,
-        obscureText: true,
+        controller: widget.controller,
+        obscureText: _obscure,
+        enableSuggestions: false,
+        autocorrect: false,
+        cursorColor: Styles.secondaryAccentColorDark,
         style: const TextStyle(
-          fontSize: 16,
-          color: Styles.textColor,
+          fontSize: 18,
+          color: Color(0xFF2A223D),
           fontWeight: FontWeight.w600,
         ),
-        decoration: const InputDecoration.collapsed(hintText: ''),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: widget.hintText,
+          hintStyle: const TextStyle(
+            color: Color(0xFF9B90BA),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          suffixIcon: IconButton(
+            splashRadius: 18,
+            onPressed: () => setState(() => _obscure = !_obscure),
+            icon: Icon(
+              _obscure ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+              color: const Color(0xFF8A80A8),
+              size: 18,
+            ),
+          ),
+          suffixIconConstraints: const BoxConstraints(minWidth: 34),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+        ),
       ),
     );
   }
