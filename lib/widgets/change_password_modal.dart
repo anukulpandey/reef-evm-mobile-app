@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/service_providers.dart';
@@ -119,6 +120,14 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final colors = context.reefColors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final modalBackground = isDarkTheme
+        ? const Color(0xFF3A006A)
+        : const Color(0xFFECE7F6);
+    final titleColor = isDarkTheme
+        ? colors.textPrimary
+        : const Color(0xFF313A52);
     return Center(
       child: SingleChildScrollView(
         child: Dialog(
@@ -126,7 +135,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
           insetPadding: const EdgeInsets.all(16),
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF3E0070),
+              color: modalBackground,
               borderRadius: BorderRadius.circular(36),
             ),
             child: Padding(
@@ -150,21 +159,23 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: titleColor,
                           ),
                         ),
                       ),
                       GestureDetector(
                         onTap: () => Navigator.of(context).pop(),
                         child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
+                          decoration: BoxDecoration(
+                            color: isDarkTheme
+                                ? colors.cardBackground
+                                : Colors.white,
                             shape: BoxShape.circle,
                           ),
                           padding: const EdgeInsets.all(10),
-                          child: const Icon(
+                          child: Icon(
                             CupertinoIcons.xmark,
-                            color: Colors.black87,
+                            color: colors.textSecondary,
                             size: 12,
                           ),
                         ),
@@ -173,7 +184,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                   ),
                   const Gap(14),
                   if (_hasPassword) ...[
-                    _label(l10n.enterAppPassword),
+                    _label(context, l10n.enterAppPassword),
                     const Gap(8),
                     _PasswordInput(
                       controller: _currentPasswordController,
@@ -181,7 +192,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                     ),
                     const Gap(12),
                   ],
-                  _label(l10n.newPassword.toUpperCase()),
+                  _label(context, l10n.newPassword.toUpperCase()),
                   const Gap(8),
                   _PasswordInput(
                     controller: _newPasswordController,
@@ -190,11 +201,11 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                   ),
                   if (_newPasswordError) ...[
                     const Gap(8),
-                    _errorRow('Password is too short'),
+                    _errorRow(context, 'Password is too short'),
                   ],
                   if (_newPassword.isNotEmpty && !_newPasswordError) ...[
                     const Gap(16),
-                    _label(l10n.repeatPasswordForVerification),
+                    _label(context, l10n.repeatPasswordForVerification),
                     const Gap(8),
                     _PasswordInput(
                       controller: _confirmPasswordController,
@@ -203,7 +214,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                     ),
                     if (_confirmPasswordError) ...[
                       const Gap(8),
-                      _errorRow(l10n.passwordMismatch),
+                      _errorRow(context, l10n.passwordMismatch),
                     ],
                   ],
                   const Gap(24),
@@ -215,10 +226,11 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(40),
                         ),
-                        shadowColor: const Color(0x559D6CFF),
+                        shadowColor: colors.accentStrong.withOpacity(0.35),
                         elevation: 5,
-                        disabledBackgroundColor: const Color(0xFF9D6CFF),
-                        backgroundColor: Styles.secondaryAccentColor,
+                        disabledBackgroundColor: colors.accentStrong
+                            .withOpacity(0.42),
+                        backgroundColor: colors.accentStrong,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       child: Text(
@@ -240,19 +252,22 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
     );
   }
 
-  static Widget _label(String text) {
+  static Widget _label(BuildContext context, String text) {
+    final colors = context.reefColors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w500,
-        color: Color(0xFFC4B8E6),
+        color: isDarkTheme ? colors.textMuted : const Color(0xFF8F95B2),
         letterSpacing: 0.2,
       ),
     );
   }
 
-  static Widget _errorRow(String message) {
+  static Widget _errorRow(BuildContext context, String message) {
+    final colors = context.reefColors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -265,7 +280,7 @@ class _ChangePasswordModalState extends ConsumerState<_ChangePasswordModal> {
         Flexible(
           child: Text(
             message,
-            style: const TextStyle(color: Color(0xFFB9C1D8), fontSize: 13),
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
           ),
         ),
       ],
@@ -293,15 +308,17 @@ class _PasswordInputState extends State<_PasswordInput> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDarkTheme ? colors.cardBackground : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: widget.showErrorBorder
-              ? Styles.errorColor
-              : const Color(0xFFCDC3E4),
+              ? colors.danger
+              : (isDarkTheme ? colors.inputBorder : const Color(0xFFCDC3E4)),
           width: 1,
         ),
       ),
@@ -310,17 +327,19 @@ class _PasswordInputState extends State<_PasswordInput> {
         obscureText: _obscure,
         enableSuggestions: false,
         autocorrect: false,
-        cursorColor: Styles.secondaryAccentColorDark,
-        style: const TextStyle(
+        cursorColor: colors.accentStrong,
+        style: TextStyle(
           fontSize: 18,
-          color: Color(0xFF2A223D),
+          color: colors.textPrimary,
           fontWeight: FontWeight.w600,
         ),
         decoration: InputDecoration(
           isDense: true,
+          filled: false,
+          fillColor: Colors.transparent,
           hintText: widget.hintText,
-          hintStyle: const TextStyle(
-            color: Color(0xFF9B90BA),
+          hintStyle: TextStyle(
+            color: colors.textMuted,
             fontSize: 15,
             fontWeight: FontWeight.w500,
           ),
@@ -330,7 +349,7 @@ class _PasswordInputState extends State<_PasswordInput> {
             onPressed: () => setState(() => _obscure = !_obscure),
             icon: Icon(
               _obscure ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
-              color: const Color(0xFF8A80A8),
+              color: colors.textMuted,
               size: 18,
             ),
           ),

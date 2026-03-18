@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/service_providers.dart';
@@ -54,6 +55,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final colors = context.reefColors;
     if (_isChecking) {
       return Scaffold(
         backgroundColor: Styles.splashBackgroundColor,
@@ -123,10 +125,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       }
                     },
                     decoration: InputDecoration(
-                      labelText: l10n.enterAppPassword,
+                      hintText: l10n.enterAppPassword,
+                      hintStyle: TextStyle(color: colors.textMuted),
                       errorText: _passwordError ? l10n.invalidPassword : null,
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: colors.cardBackground,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide(color: colors.inputBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide(color: colors.inputBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide(
+                          color: colors.accentStrong,
+                          width: 1.4,
+                        ),
+                      ),
+                    ),
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),

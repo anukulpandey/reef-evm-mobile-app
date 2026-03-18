@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/theme/reef_theme_colors.dart';
 import '../../core/theme/styles.dart';
 import '../official_components.dart';
 
@@ -25,6 +26,7 @@ class SendTransactionStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     final sendStepState = isSentToNetwork
         ? SendTransactionStepState.complete
         : (isSending
@@ -39,6 +41,7 @@ class SendTransactionStatusCard extends StatelessWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
       child: ViewBoxContainer(
+        color: colors.cardBackground,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
           child: Column(
@@ -49,7 +52,7 @@ class SendTransactionStatusCard extends StatelessWidget {
                 subtitle: 'Sending transaction to network...',
                 state: sendStepState,
               ),
-              _buildConnector(active: isSentToNetwork),
+              _buildConnector(context, active: isSentToNetwork),
               _StatusTimelineStep(
                 title: 'Sent to network',
                 subtitle: isSentToNetwork
@@ -73,7 +76,7 @@ class SendTransactionStatusCard extends StatelessWidget {
                     elevation: canContinue ? 5 : 0,
                     backgroundColor: canContinue
                         ? Styles.primaryAccentColor
-                        : const Color(0xffd4cfe3),
+                        : colors.cardBackgroundSecondary,
                     padding: const EdgeInsets.symmetric(
                       vertical: 16,
                       horizontal: 32,
@@ -87,7 +90,7 @@ class SendTransactionStatusCard extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: canContinue
                           ? Styles.whiteColor
-                          : Styles.textLightColor.withOpacity(0.8),
+                          : colors.textMuted.withOpacity(0.8),
                     ),
                   ),
                 ),
@@ -99,7 +102,8 @@ class SendTransactionStatusCard extends StatelessWidget {
     );
   }
 
-  Widget _buildConnector({required bool active}) {
+  Widget _buildConnector(BuildContext context, {required bool active}) {
+    final colors = context.reefColors;
     return Padding(
       padding: const EdgeInsets.only(left: 14, top: 2, bottom: 2),
       child: Container(
@@ -116,8 +120,11 @@ class SendTransactionStatusCard extends StatelessWidget {
                     Styles.secondaryAccentColorDark,
                   ],
                 )
-              : const LinearGradient(
-                  colors: [Color(0xffc9c3da), Color(0xffc9c3da)],
+              : LinearGradient(
+                  colors: [
+                    colors.inputBorder.withOpacity(0.7),
+                    colors.inputBorder.withOpacity(0.7),
+                  ],
                 ),
         ),
       ),
@@ -138,6 +145,7 @@ class _StatusTimelineStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -155,7 +163,7 @@ class _StatusTimelineStep extends StatelessWidget {
                     fontSize: 24,
                     height: 1.1,
                     fontWeight: FontWeight.w700,
-                    color: Styles.textColor,
+                    color: colors.textPrimary,
                   ),
                 ),
                 const Gap(4),
@@ -164,7 +172,7 @@ class _StatusTimelineStep extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: Styles.textLightColor,
+                    color: colors.textMuted,
                   ),
                 ),
               ],
@@ -183,6 +191,7 @@ class _StatusStepIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     switch (state) {
       case SendTransactionStepState.complete:
         return Container(
@@ -229,8 +238,8 @@ class _StatusStepIndicator extends StatelessWidget {
           height: 30,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withOpacity(0.6),
-            border: Border.all(color: const Color(0xffc9c3da), width: 2),
+            color: colors.cardBackgroundSecondary.withOpacity(0.85),
+            border: Border.all(color: colors.inputBorder, width: 2),
           ),
         );
     }
@@ -245,12 +254,14 @@ class _HashBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: Colors.white.withOpacity(0.55),
+        color: colors.cardBackgroundSecondary,
+        border: Border.all(color: colors.borderColor.withOpacity(0.7)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +272,7 @@ class _HashBox extends StatelessWidget {
               style: GoogleFonts.poppins(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Styles.textColor,
+                color: colors.textPrimary,
               ),
             ),
           ),
@@ -269,13 +280,9 @@ class _HashBox extends StatelessWidget {
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: onCopy,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(4),
-              child: Icon(
-                Icons.copy_rounded,
-                size: 18,
-                color: Styles.primaryAccentColor,
-              ),
+              child: Icon(Icons.copy_rounded, size: 18, color: colors.accent),
             ),
           ),
         ],

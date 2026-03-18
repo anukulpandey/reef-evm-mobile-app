@@ -57,18 +57,19 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   bool _isValidAddress = false;
   bool _isSubmitting = false;
   double _rating = 0;
+  double _availableTokenBalance = 0;
   String? _txHash;
   String? _errorMessage;
   SendFlowStatus _status = SendFlowStatus.noAddress;
 
+  ReefThemeColors get _colors => context.reefColors;
+  bool get _isDarkTheme => Theme.of(context).brightness == Brightness.dark;
+
   bool get _isNativeToken {
-    final symbol = widget.token.symbol.toUpperCase();
-    return widget.token.address == 'native' ||
-        symbol == 'REEF' ||
-        symbol == 'WREEF';
+    return widget.token.address == 'native';
   }
 
-  double get _tokenBalance => AmountUtils.parseNumeric(widget.token.balance);
+  double get _tokenBalance => _availableTokenBalance;
 
   double get _maxTransferAmount {
     final reserveForFee = _isNativeToken ? 3.0 : 0.0;
@@ -85,6 +86,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   @override
   void initState() {
     super.initState();
+    _availableTokenBalance = AmountUtils.parseNumeric(widget.token.balance);
     _recipientController.text = widget.prefilledAddress?.trim() ?? '';
     _recipientFocus.addListener(() {
       if (!mounted) return;
@@ -94,7 +96,10 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       if (!mounted) return;
       setState(() => _isAmountEditing = _amountFocus.hasFocus);
     });
-    _revalidate();
+    Future.microtask(() async {
+      await _refreshLiveBalance();
+      await _revalidate();
+    });
   }
 
   @override
@@ -136,6 +141,31 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       _status = _isSubmitting ? SendFlowStatus.sending : next;
       _rating = nextRating;
     });
+  }
+
+  Future<void> _refreshLiveBalance() async {
+    final activeAccount = ref.read(walletProvider).activeAccount;
+    if (activeAccount == null) return;
+
+    try {
+      final web3Service = ref.read(web3ServiceProvider);
+      final liveBalanceText = _isNativeToken
+          ? await web3Service.getBalance(activeAccount.address)
+          : await web3Service.getERC20Balance(
+              activeAccount.address,
+              widget.token.address,
+              decimalsHint: widget.token.decimals,
+            );
+      final liveBalance = AmountUtils.parseNumeric(liveBalanceText);
+      if (!mounted) return;
+      setState(() {
+        _availableTokenBalance = liveBalance;
+      });
+    } catch (error) {
+      print(
+        '[send][refresh_balance_error] token=${widget.token.symbol} error=$error',
+      );
+    }
   }
 
   String _sliderAmount(double rating) {
@@ -231,7 +261,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       errorBorder: InputBorder.none,
       focusedErrorBorder: InputBorder.none,
       hintText: hintText,
-      hintStyle: const TextStyle(color: Styles.textLightColor),
+      hintStyle: TextStyle(color: _colors.textMuted),
     );
   }
 
@@ -380,6 +410,15 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   Future<void> _onConfirmSend() async {
     if (_status != SendFlowStatus.ready || _isSubmitting) return;
 
+    await _refreshLiveBalance();
+    await _revalidate();
+    if (!mounted || _status != SendFlowStatus.ready) {
+      setState(() {
+        _errorMessage = _amountValidationMessage();
+      });
+      return;
+    }
+
     final to = _recipientController.text.trim();
     final amount = _amountController.text.trim();
     final walletState = ref.read(walletProvider);
@@ -455,14 +494,18 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     final feedback = _buildFeedbackUI(context);
 
     return Scaffold(
-      backgroundColor: Styles.primaryBackgroundColor,
+      backgroundColor: _colors.pageBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Styles.primaryBackgroundColor,
-        foregroundColor: Styles.textColor,
+        backgroundColor: _colors.pageBackground,
+        foregroundColor: _colors.textPrimary,
         title: Text(
           l10n.sendToken,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 20),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: _colors.textPrimary,
+          ),
         ),
       ),
       body: GestureDetector(
@@ -478,10 +521,12 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(15),
-                    color: Styles.primaryBackgroundColor,
-                    boxShadow: const [
+                    color: _colors.cardBackground,
+                    boxShadow: [
                       BoxShadow(
-                        color: Color(0x22000000),
+                        color: _isDarkTheme
+                            ? Colors.black.withOpacity(0.24)
+                            : const Color(0x22000000),
                         blurRadius: 18,
                         offset: Offset(0, 10),
                       ),
@@ -527,21 +572,21 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           border: _isRecipientEditing
-              ? Border.all(color: const Color(0xffa328ab))
-              : Border.all(color: const Color(0x00d7d1e9)),
+              ? Border.all(color: _colors.accentStrong, width: 1.3)
+              : Border.all(color: _colors.inputBorder.withOpacity(0.12)),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             if (_isRecipientEditing)
-              const BoxShadow(
+              BoxShadow(
                 blurRadius: 15,
                 spreadRadius: -8,
                 offset: Offset(0, 10),
-                color: Color(0x40a328ab),
+                color: _colors.accentStrong.withOpacity(0.28),
               ),
           ],
           color: _isRecipientEditing
-              ? const Color(0xffeeebf6)
-              : const Color(0xffE7E2F2),
+              ? _colors.inputFill
+              : _colors.cardBackgroundSecondary,
         ),
         child: Row(
           children: [
@@ -558,8 +603,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 child: Icon(
                   Icons.chevron_right_rounded,
                   color: _isSubmitting
-                      ? Styles.textLightColor
-                      : Styles.textColor,
+                      ? _colors.textMuted
+                      : _colors.textPrimary,
                 ),
               ),
             ),
@@ -573,8 +618,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: _isSubmitting
-                      ? Styles.textLightColor
-                      : Styles.textColor,
+                      ? _colors.textMuted
+                      : _colors.textPrimary,
                 ),
                 decoration: _embeddedFieldDecoration(
                   hintText: l10n.recipientAddress,
@@ -592,9 +637,11 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 ),
                 onPressed: _isSubmitting ? null : _scanAddressViaCamera,
                 onLongPress: _isSubmitting ? null : _fillAddressFromClipboard,
-                child: const Icon(
+                child: Icon(
                   Icons.qr_code_scanner_sharp,
-                  color: Styles.textColor,
+                  color: _isSubmitting
+                      ? _colors.textMuted
+                      : _colors.textPrimary,
                 ),
               ),
             ),
@@ -616,10 +663,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 const Gap(5),
                 Text(
                   AddressUtils.shorten(_recipientController.text.trim()),
-                  style: const TextStyle(
-                    color: Styles.textLightColor,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: _colors.textMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -631,21 +675,21 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           border: _isAmountEditing
-              ? Border.all(color: const Color(0xffa328ab))
-              : Border.all(color: const Color(0x00d7d1e9)),
+              ? Border.all(color: _colors.accentStrong, width: 1.3)
+              : Border.all(color: _colors.inputBorder.withOpacity(0.12)),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             if (_isAmountEditing)
-              const BoxShadow(
+              BoxShadow(
                 blurRadius: 15,
                 spreadRadius: -8,
                 offset: Offset(0, 10),
-                color: Color(0x40a328ab),
+                color: _colors.accentStrong.withOpacity(0.28),
               ),
           ],
           color: _isAmountEditing
-              ? const Color(0xffeeebf6)
-              : const Color(0xffE7E2F2),
+              ? _colors.inputFill
+              : _colors.cardBackgroundSecondary,
         ),
         child: Row(
           children: [
@@ -667,16 +711,16 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                         fontWeight: FontWeight.w600,
                         fontSize: 18,
                         color: _isSubmitting
-                            ? Styles.textLightColor
-                            : Styles.darkBackgroundColor,
+                            ? _colors.textMuted
+                            : _colors.textPrimary,
                       ),
                     ),
                     BlurableContent(
                       showContent: showBalance,
                       child: Text(
                         '${AmountUtils.formatInputAmount(_tokenBalance)} ${widget.token.symbol.toUpperCase()}',
-                        style: const TextStyle(
-                          color: Styles.textLightColor,
+                        style: TextStyle(
+                          color: _colors.textMuted,
                           fontSize: 12,
                         ),
                       ),
@@ -701,8 +745,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: _isSubmitting
-                      ? Styles.textLightColor
-                      : Styles.textColor,
+                      ? _colors.textMuted
+                      : _colors.textPrimary,
                 ),
                 decoration: _embeddedFieldDecoration(
                   hintText: '0.0',
@@ -749,10 +793,10 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    shadowColor: const Color(0x559d6cff),
+                    shadowColor: _colors.accentStrong.withOpacity(0.32),
                     elevation: 0,
                     backgroundColor: isReady
-                        ? const Color(0xffe6e2f1)
+                        ? _colors.cardBackgroundSecondary
                         : Colors.transparent,
                     padding: const EdgeInsets.all(0),
                   ),
@@ -764,7 +808,9 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                       horizontal: 22,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xffe6e2f1),
+                      color: isReady
+                          ? _colors.cardBackgroundSecondary
+                          : _colors.cardBackgroundSecondary,
                       gradient: isReady ? Styles.buttonGradient : null,
                       borderRadius: const BorderRadius.all(Radius.circular(14)),
                     ),
@@ -775,7 +821,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: !isReady
-                              ? const Color(0x65898e9c)
+                              ? _colors.textMuted.withOpacity(0.72)
                               : Colors.white,
                         ),
                       ),
@@ -790,7 +836,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(
                         Styles.primaryAccentColor,
                       ),
-                      backgroundColor: Styles.greyColor,
+                      backgroundColor: _colors.cardBackgroundSecondary,
                     ),
                   ],
                 ),
@@ -800,8 +846,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           Text(
             _errorMessage!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Styles.errorColor,
+            style: TextStyle(
+              color: _colors.danger,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -862,11 +908,15 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     final isNative = _isNativeToken;
     final chainId = await web3.getChainId();
     final gasPriceWei = await web3.getGasPriceWei();
+    final amountRaw = web3.parseAmountToRaw(amountText, widget.token.decimals);
     final gasLimit = isNative
-        ? web3.nativeTransferGasLimit
+        ? await web3.estimateNativeTransferGasLimit(
+            fromAddress: fromAddress,
+            toAddress: recipientAddress,
+            amountWei: amountRaw,
+          )
         : web3.erc20TransferGasLimit;
     final feeWei = gasPriceWei * BigInt.from(gasLimit);
-    final amountRaw = web3.parseAmountToRaw(amountText, widget.token.decimals);
 
     final networkName = _networkNameForChainId(chainId);
     final fields = <TransactionPreviewField>[

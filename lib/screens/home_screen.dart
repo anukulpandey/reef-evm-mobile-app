@@ -12,6 +12,7 @@ import '../core/config/dex_config.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/pool_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
@@ -32,14 +33,18 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
 
+  ReefThemeColors get _colors => context.reefColors;
+  bool get _isDarkTheme => Theme.of(context).brightness == Brightness.dark;
+
   @override
   Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(
+      backgroundColor: _colors.pageBackground,
       body: Container(
-        color: Styles.primaryBackgroundColor,
+        color: _colors.pageBackground,
         child: Column(
           children: [
             Material(
@@ -104,29 +109,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       margin: const EdgeInsets.only(top: 12, left: 12, right: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(15),
-        color: Styles.primaryBackgroundColor,
+        color: _isDarkTheme ? _colors.cardBackground : _colors.cardBackground,
         boxShadow: [
           BoxShadow(
-            color: const HSLColor.fromAHSL(
-              1,
-              256.3636363636,
-              0.379310344828,
-              0.843137254902,
-            ).toColor(),
-            offset: const Offset(10, 10),
-            blurRadius: 20,
-            spreadRadius: -5,
+            color: _isDarkTheme
+                ? Colors.black.withOpacity(0.22)
+                : const Color(0x14000000),
+            offset: const Offset(0, 8),
+            blurRadius: 22,
+            spreadRadius: -8,
           ),
           BoxShadow(
-            color: const HSLColor.fromAHSL(
-              1,
-              256.3636363636,
-              0.379310344828,
-              1,
-            ).toColor(),
-            offset: const Offset(-10, -10),
-            blurRadius: 20,
-            spreadRadius: -5,
+            color: _isDarkTheme
+                ? _colors.accentStrong.withOpacity(0.08)
+                : Colors.white.withOpacity(0.7),
+            offset: const Offset(0, -4),
+            blurRadius: 18,
+            spreadRadius: -10,
           ),
         ],
       ),
@@ -155,13 +154,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(9),
-          color: isSelected ? Styles.whiteColor : Colors.transparent,
+          color: isSelected ? _colors.navBackground : Colors.transparent,
           boxShadow: isSelected
               ? [
-                  const BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 5,
-                    offset: Offset(0, 2.5),
+                  BoxShadow(
+                    color: _isDarkTheme
+                        ? Colors.black.withOpacity(0.2)
+                        : Colors.black12,
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ]
               : [],
@@ -171,9 +172,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: isSelected
-                ? Styles.textColor
-                : Styles.textColor.withOpacity(0.5),
+            color: isSelected ? _colors.textPrimary : _colors.textMuted,
           ),
         ),
       ),
@@ -193,7 +192,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Text(
           l10n.noAccountAvailable,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Styles.textLightColor, fontSize: 14),
+          style: TextStyle(color: _colors.textMuted, fontSize: 14),
         ),
         const Gap(24),
         Container(
@@ -251,7 +250,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               padding: const EdgeInsets.all(40.0),
               child: Text(
                 l10n.noTokensFound,
-                style: const TextStyle(color: Styles.textLightColor),
+                style: TextStyle(color: _colors.textMuted),
               ),
             ),
           ),
@@ -277,7 +276,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             padding: const EdgeInsets.all(40.0),
             child: Text(
               l10n.noNftsFound,
-              style: const TextStyle(color: Styles.textLightColor),
+              style: TextStyle(color: _colors.textMuted),
             ),
           ),
         ),
@@ -288,6 +287,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildTokenCard(Token token, bool showBalance) {
     final l10n = AppLocalizations.of(context);
     return ViewBoxContainer(
+      color: _colors.cardBackground,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -302,7 +302,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: Colors.white,
+                      backgroundColor: _colors.cardBackgroundSecondary,
                       child: TokenAvatar(
                         size: 32,
                         iconUrl: token.iconUrl,
@@ -321,7 +321,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              color: Styles.textColor,
+                              color: _colors.textPrimary,
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),
@@ -330,8 +330,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             _formatUsdPrice(token.usdPrice ?? 0),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Styles.textLightColor,
+                            style: TextStyle(
+                              color: _colors.textMuted,
                               fontSize: 14,
                             ),
                           ),
@@ -353,7 +353,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 _formatUsdValue(token.usdValue ?? 0),
                                 gradient: textGradient(),
                                 style: GoogleFonts.poppins(
-                                  color: Styles.textColor,
+                                  color: _colors.textPrimary,
                                   fontSize: 18,
                                   fontWeight: FontWeight.w900,
                                 ),
@@ -364,8 +364,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             showContent: showBalance,
                             child: Text(
                               '${token.balance} ${token.symbol}',
-                              style: const TextStyle(
-                                color: Styles.textColor,
+                              style: TextStyle(
+                                color: _colors.textPrimary,
                                 fontWeight: FontWeight.w600,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -419,9 +419,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: Styles.secondaryAccentColorDark,
                       size: 18,
                     ),
-                    label: const Text(
+                    label: Text(
                       'Swap',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Styles.secondaryAccentColorDark,
                         fontWeight: FontWeight.w700,
                       ),
@@ -433,7 +433,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       shape: const StadiumBorder(),
                       padding: const EdgeInsets.symmetric(vertical: 11),
-                      backgroundColor: Colors.white.withOpacity(0.3),
+                      backgroundColor: _isDarkTheme
+                          ? _colors.cardBackgroundSecondary.withOpacity(0.5)
+                          : Colors.white.withOpacity(0.3),
                     ),
                     onPressed: () => _openSwapForToken(token),
                   ),

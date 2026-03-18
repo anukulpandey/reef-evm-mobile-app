@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../core/config/dex_config.dart';
 import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
+import '../models/account.dart';
 import '../models/pool.dart';
 import '../models/pool_transaction.dart';
 import '../models/transaction_preview.dart';
@@ -18,8 +20,11 @@ import '../providers/service_providers.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/address_utils.dart';
 import '../utils/amount_utils.dart';
+import '../utils/transaction_error_mapper.dart';
+import '../widgets/common/always_visible_slider_thumb_shape.dart';
 import '../widgets/blurable_content.dart';
 import '../widgets/common/token_avatar.dart';
+import '../widgets/send/send_amount_slider.dart';
 import 'transaction_confirmation_screen.dart';
 
 enum _ChartMetric { price, volume, liquidity, fees }
@@ -53,6 +58,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   Color get _inputBg => _themeColors.inputFill;
   Color get _inputBorder => _themeColors.inputBorder;
   Color get _accent => _themeColors.accent;
+  Color get _headerTitleColor => Colors.white;
   Color get _swapSurface => _isDarkTheme ? const Color(0xFF251343) : _cardBg;
   Color get _swapSurfaceAlt =>
       _isDarkTheme ? const Color(0xFF3C2A5F) : _cardBgAlt;
@@ -66,6 +72,8 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       : _themeColors.textMuted.withOpacity(0.45);
 
   final TextEditingController _amountController = TextEditingController();
+  final FocusNode _amountFocusNode = FocusNode();
+  Timer? _quoteDebounce;
   int _quoteRequestId = 0;
 
   _ChartMetric _chartMetric = _ChartMetric.price;
@@ -76,32 +84,45 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   bool _isSubmittingSwap = false;
   bool _isApproving = false;
   bool _allowanceEnough = true;
+  double _slippagePercent = DexConfig.defaultSlippagePercent;
 
   BigInt _inputRaw = BigInt.zero;
   BigInt _quotedOutRaw = BigInt.zero;
   String _quotedOutDisplay = '0';
   String? _swapError;
+  String? _quoteNote;
   String? _lastTxHash;
 
   @override
   void initState() {
     super.initState();
     _amountController.addListener(_onAmountChanged);
+    _amountFocusNode.addListener(_onAmountFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshQuoteAndAllowance();
+      _scheduleQuoteRefresh(immediate: true);
     });
   }
 
   @override
   void dispose() {
+    _quoteDebounce?.cancel();
     _amountController
       ..removeListener(_onAmountChanged)
+      ..dispose();
+    _amountFocusNode
+      ..removeListener(_onAmountFocusChanged)
       ..dispose();
     super.dispose();
   }
 
   void _onAmountChanged() {
-    _refreshQuoteAndAllowance();
+    _scheduleQuoteRefresh();
+  }
+
+  void _onAmountFocusChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   _PoolAsset get _assetIn => _inputToken0
@@ -111,6 +132,27 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   _PoolAsset get _assetOut => _inputToken0
       ? _PoolAsset.fromPool(widget.pool, isToken0: false)
       : _PoolAsset.fromPool(widget.pool, isToken0: true);
+
+  void _scheduleQuoteRefresh({bool immediate = false}) {
+    _quoteDebounce?.cancel();
+    if (immediate) {
+      unawaited(_refreshQuoteAndAllowance());
+      return;
+    }
+
+    final hasAmount = _amountController.text.trim().isNotEmpty;
+    if (mounted) {
+      setState(() {
+        _swapError = null;
+        _quoteNote = null;
+        _isLoadingQuote = hasAmount;
+      });
+    }
+
+    _quoteDebounce = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_refreshQuoteAndAllowance());
+    });
+  }
 
   Future<void> _refreshQuoteAndAllowance() async {
     final reqId = ++_quoteRequestId;
@@ -129,6 +171,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         _quotedOutDisplay = '0';
         _isLoadingQuote = false;
         _allowanceEnough = true;
+        _quoteNote = null;
       });
       return;
     }
@@ -143,6 +186,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         _quotedOutRaw = BigInt.zero;
         _quotedOutDisplay = '0';
         _isLoadingQuote = false;
+        _quoteNote = null;
       });
       return;
     }
@@ -154,6 +198,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         _quotedOutRaw = BigInt.zero;
         _quotedOutDisplay = '0';
         _isLoadingQuote = false;
+        _quoteNote = null;
       });
       return;
     }
@@ -162,24 +207,61 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       _inputRaw = rawIn;
       _isLoadingQuote = true;
       _swapError = null;
+      _quoteNote = null;
     });
 
     try {
+      final useDirectPair = _canUseDirectPairSwap(inAsset, outAsset);
       final path = <String>[inAsset.routerAddress, outAsset.routerAddress];
-      final outRaw = await web3.getAmountsOut(
-        routerAddress: DexConfig.routerAddress,
-        amountIn: rawIn,
-        path: path,
-      );
 
-      var hasAllowance = true;
-      if (!inAsset.isNative) {
-        final allowance = await web3.getErc20Allowance(
-          tokenAddress: inAsset.address,
-          owner: account.address,
-          spender: DexConfig.routerAddress,
+      BigInt outRaw;
+      String? quoteNote;
+      try {
+        outRaw = await web3.getAmountsOut(
+          routerAddress: DexConfig.routerAddress,
+          amountIn: rawIn,
+          path: path,
         );
-        hasAllowance = allowance >= rawIn;
+        if (outRaw <= BigInt.zero) {
+          throw Exception('No route found on router for this pair and amount.');
+        }
+      } catch (_) {
+        try {
+          outRaw = await _quoteDirectPairSwap(
+            amountIn: rawIn,
+            inAsset: inAsset,
+            outAsset: outAsset,
+          );
+          if (outRaw <= BigInt.zero) {
+            throw Exception('No route found for this pair and amount.');
+          }
+          quoteNote = 'Router quote unavailable; using pool reserve fallback.';
+        } catch (_) {
+          if (!mounted || reqId != _quoteRequestId) return;
+          setState(() {
+            _quotedOutRaw = BigInt.zero;
+            _quotedOutDisplay = '0';
+            _allowanceEnough = useDirectPair;
+            _isLoadingQuote = false;
+            _quoteNote = null;
+            _swapError = 'No route found for this pair and amount.';
+          });
+          return;
+        }
+      }
+
+      var hasAllowance = useDirectPair;
+      if (!useDirectPair) {
+        try {
+          final allowance = await web3.getErc20Allowance(
+            tokenAddress: inAsset.address,
+            owner: account.address,
+            spender: DexConfig.routerAddress,
+          );
+          hasAllowance = allowance >= rawIn;
+        } catch (_) {
+          hasAllowance = false;
+        }
       }
 
       if (!mounted || reqId != _quoteRequestId) return;
@@ -188,15 +270,17 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         _quotedOutDisplay = web3.formatAmountFromRaw(outRaw, outAsset.decimals);
         _allowanceEnough = hasAllowance;
         _isLoadingQuote = false;
+        _quoteNote = quoteNote;
       });
     } catch (e) {
       if (!mounted || reqId != _quoteRequestId) return;
       setState(() {
         _quotedOutRaw = BigInt.zero;
         _quotedOutDisplay = '0';
-        _allowanceEnough = inAsset.isNative;
+        _allowanceEnough = _canUseDirectPairSwap(inAsset, outAsset);
         _isLoadingQuote = false;
-        _swapError = e.toString().replaceFirst('Exception: ', '');
+        _quoteNote = null;
+        _swapError = 'No route found for this pair and amount.';
       });
     }
   }
@@ -225,6 +309,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               setState(() {
                 _isApproving = true;
                 _swapError = null;
+                _quoteNote = null;
               });
             }
             try {
@@ -262,8 +347,9 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final userError = TransactionErrorMapper.fromThrowable(e);
       setState(() {
-        _swapError = e.toString().replaceFirst('Exception: ', '');
+        _swapError = userError.message;
       });
     }
   }
@@ -276,13 +362,12 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
 
     final inAsset = _assetIn;
     final outAsset = _assetOut;
+    final useDirectPair = _canUseDirectPairSwap(inAsset, outAsset);
     final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final deadline = BigInt.from(
       nowSec + (DexConfig.defaultDeadlineMinutes * 60),
     );
-    final slippageBps = BigInt.from(
-      (DexConfig.defaultSlippagePercent * 100).round(),
-    );
+    final slippageBps = BigInt.from((_slippagePercent * 100).round());
     final amountOutMin =
         _quotedOutRaw - ((_quotedOutRaw * slippageBps) ~/ BigInt.from(10000));
     final path = <String>[inAsset.routerAddress, outAsset.routerAddress];
@@ -293,6 +378,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       amountOutMin: amountOutMin,
       deadline: deadline,
       path: path,
+      useDirectPair: useDirectPair,
     );
     if (!mounted) return;
 
@@ -307,30 +393,17 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
               setState(() {
                 _isSubmittingSwap = true;
                 _swapError = null;
+                _quoteNote = null;
               });
             }
             try {
               final web3 = ref.read(web3ServiceProvider);
-              if (inAsset.isNative) {
-                return await web3.swapExactEthForTokens(
+              if (useDirectPair) {
+                return await _executeDirectPairSwap(
                   account: account,
-                  routerAddress: DexConfig.routerAddress,
-                  amountInWei: _inputRaw,
+                  inAsset: inAsset,
+                  outAsset: outAsset,
                   amountOutMin: amountOutMin,
-                  path: path,
-                  to: account.address,
-                  deadline: deadline,
-                );
-              }
-              if (outAsset.isNative) {
-                return await web3.swapExactTokensForEth(
-                  account: account,
-                  routerAddress: DexConfig.routerAddress,
-                  amountIn: _inputRaw,
-                  amountOutMin: amountOutMin,
-                  path: path,
-                  to: account.address,
-                  deadline: deadline,
                 );
               }
               return await web3.swapExactTokensForTokens(
@@ -369,6 +442,70 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     );
   }
 
+  Future<String> _executeDirectPairSwap({
+    required Account account,
+    required _PoolAsset inAsset,
+    required _PoolAsset outAsset,
+    required BigInt amountOutMin,
+  }) async {
+    final web3 = ref.read(web3ServiceProvider);
+    final pairAddress = widget.pool.id;
+    if (pairAddress.trim().isEmpty) {
+      throw Exception('Direct pair swap is unavailable for this pool.');
+    }
+
+    final (reserve0, reserve1) = await web3.getPairReservesRaw(
+      pairAddress: pairAddress,
+    );
+    var transferAmount = _inputRaw;
+    if (inAsset.isCanonicalReef) {
+      final wrappedBalance = await web3.getErc20BalanceRaw(
+        tokenAddress: inAsset.address,
+        owner: account.address,
+      );
+      if (wrappedBalance < transferAmount) {
+        final wrapAmount = transferAmount - wrappedBalance;
+        final wrapHash = await web3.wrapNative(
+          account: account,
+          wrappedTokenAddress: inAsset.address,
+          amountWei: wrapAmount,
+        );
+        await web3.waitForReceipt(wrapHash);
+      }
+    }
+
+    final inputIsToken0 =
+        widget.pool.token0Address.toLowerCase() ==
+        inAsset.address.toLowerCase();
+    final reserveIn = inputIsToken0 ? reserve0 : reserve1;
+    final reserveOut = inputIsToken0 ? reserve1 : reserve0;
+    final quotedOut = _getAmountOutRaw(transferAmount, reserveIn, reserveOut);
+    if (quotedOut <= BigInt.zero) {
+      throw Exception('No output amount available for this pool.');
+    }
+    final slippageBps = BigInt.from((_slippagePercent * 100).round());
+    final discountedOut =
+        quotedOut - ((quotedOut * slippageBps) ~/ BigInt.from(10000));
+    final amountOut = discountedOut > BigInt.zero ? discountedOut : quotedOut;
+    final amount0Out = inputIsToken0 ? BigInt.zero : amountOut;
+    final amount1Out = inputIsToken0 ? amountOut : BigInt.zero;
+
+    final transferHash = await web3.transferErc20Raw(
+      account: account,
+      tokenAddress: inAsset.address,
+      to: pairAddress,
+      amount: transferAmount,
+    );
+    await web3.waitForReceipt(transferHash);
+    return web3.swapPair(
+      account: account,
+      pairAddress: pairAddress,
+      amount0Out: amount0Out,
+      amount1Out: amount1Out,
+      to: account.address,
+    );
+  }
+
   void _flipPair() {
     setState(() {
       _inputToken0 = !_inputToken0;
@@ -378,6 +515,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       _quotedOutDisplay = '0';
       _allowanceEnough = true;
       _swapError = null;
+      _quoteNote = null;
     });
   }
 
@@ -395,6 +533,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       final outBalance = _balanceForAsset(walletState, outAsset);
       final inputBalanceRaw =
           _toRawFromBalance(inBalance, inAsset.decimals) ?? BigInt.zero;
+      final useDirectPair = _canUseDirectPairSwap(inAsset, outAsset);
       final hasSufficientBalance =
           _inputRaw == BigInt.zero || _inputRaw <= inputBalanceRaw;
       final canSwap =
@@ -404,31 +543,34 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
           !_isSubmittingSwap &&
           !_isApproving &&
           !_isLoadingQuote &&
-          (_allowanceEnough || inAsset.isNative);
+          (_allowanceEnough || useDirectPair);
       final requiresApproval =
-          _inputRaw > BigInt.zero && !inAsset.isNative && !_allowanceEnough;
+          _inputRaw > BigInt.zero && !useDirectPair && !_allowanceEnough;
 
       return Scaffold(
-        backgroundColor: _screenBg,
+        backgroundColor: _isDarkTheme
+            ? const Color(0xFF1E0B3B)
+            : Styles.greyColor,
         appBar: AppBar(
-          backgroundColor: _screenBg,
+          backgroundColor: _isDarkTheme
+              ? const Color(0xFF5A23A5)
+              : Colors.deepPurple.shade700,
           elevation: 0,
-          centerTitle: true,
+          centerTitle: false,
           title: Text(
-            appBarTitle,
+            'Swap Tokens',
             style: TextStyle(
-              color: _titleText,
-              fontWeight: FontWeight.w900,
-              fontSize: 21,
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
             ),
           ),
-          iconTheme: IconThemeData(color: _titleText),
+          iconTheme: const IconThemeData(color: Colors.white),
         ),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 20),
           children: [
-            _buildPoolHeaderCard(widget.pool),
-            const Gap(14),
+            const Gap(24),
             _buildSwapCard(
               inAsset: inAsset,
               outAsset: outAsset,
@@ -440,11 +582,52 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
             ),
             if (_swapError != null) ...[
               const Gap(10),
-              Text(
-                _swapError!,
-                style: TextStyle(
-                  color: _themeColors.danger,
-                  fontWeight: FontWeight.w700,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _themeColors.danger.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _themeColors.danger.withOpacity(0.35),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: _themeColors.danger,
+                      size: 20,
+                    ),
+                    const Gap(10),
+                    Expanded(
+                      child: Text(
+                        _swapError!,
+                        style: TextStyle(
+                          color: _themeColors.danger,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_swapError == null && _quoteNote != null) ...[
+              const Gap(8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  _quoteNote!,
+                  style: TextStyle(
+                    color: _bodyText,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
                 ),
               ),
             ],
@@ -470,12 +653,12 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
         title: Text(
           appBarTitle,
           style: TextStyle(
-            color: _titleText,
+            color: _headerTitleColor,
             fontWeight: FontWeight.w900,
             fontSize: 21,
           ),
         ),
-        iconTheme: IconThemeData(color: _titleText),
+        iconTheme: IconThemeData(color: _headerTitleColor),
       ),
       body: FutureBuilder<List<PoolTransactionEvent>>(
         future: poolService.getPairTransactions(widget.pool.id),
@@ -725,6 +908,40 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     );
   }
 
+  List<BoxShadow> _swapPageCardShadow() {
+    if (_isDarkTheme) {
+      return const [
+        BoxShadow(
+          color: Color(0x55080416),
+          offset: Offset(10, 10),
+          blurRadius: 20,
+          spreadRadius: -5,
+        ),
+        BoxShadow(
+          color: Color(0x1E6E35D4),
+          offset: Offset(-10, -10),
+          blurRadius: 20,
+          spreadRadius: -5,
+        ),
+      ];
+    }
+
+    return const [
+      BoxShadow(
+        color: Color(0x26B9AFD8),
+        offset: Offset(10, 10),
+        blurRadius: 20,
+        spreadRadius: -5,
+      ),
+      BoxShadow(
+        color: Colors.white,
+        offset: Offset(-10, -10),
+        blurRadius: 20,
+        spreadRadius: -5,
+      ),
+    ];
+  }
+
   Widget _buildChartCard(List<_ChartPoint> points) {
     final maxY = points.isEmpty
         ? 1.0
@@ -927,159 +1144,109 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     required bool canSwap,
     required bool hasSufficientBalance,
   }) {
+    final inputBalanceRaw =
+        _toRawFromBalance(inBalance, inAsset.decimals) ?? BigInt.zero;
+    final sliderValue = inputBalanceRaw > BigInt.zero && _inputRaw > BigInt.zero
+        ? (_inputRaw.toDouble() / inputBalanceRaw.toDouble()).clamp(0.0, 1.0)
+        : 0.0;
     final isEnabled = requiresApproval ? !_isApproving : canSwap;
+
     return Container(
       decoration: BoxDecoration(
-        color: _swapSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _swapBorder, width: 1),
+        color: _isDarkTheme
+            ? const Color(0xFF251343)
+            : Styles.primaryBackgroundColor,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: _swapPageCardShadow(),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Swap',
-              style: TextStyle(
-                color: _titleText,
-                fontWeight: FontWeight.w900,
-                fontSize: 50 / 2,
-              ),
+            _buildSwapTokenField(
+              asset: inAsset,
+              balance: inBalance,
+              amountText: _amountController.text,
+              focusNode: _amountFocusNode,
+              showMaxButton: true,
+              onTapMax: () {
+                _amountController.text = _maxInputAmount(inBalance);
+              },
             ),
-            const Gap(14),
-            _tokenRow(asset: inAsset, balance: inBalance),
-            const Gap(10),
-            TextField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              style: TextStyle(
-                color: _titleText,
-                fontWeight: FontWeight.w900,
-                fontSize: 44 / 2,
-              ),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: _swapFieldFill,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 16,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide(color: _swapFieldBorder, width: 1.6),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide(color: _swapFieldBorder, width: 1.6),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide(color: _accent, width: 2),
-                ),
-                hintText: '0.0',
-                hintStyle: TextStyle(
-                  color: _swapHint,
-                  fontWeight: FontWeight.w700,
-                ),
-                suffixIcon: IconButton(
-                  onPressed: () {
-                    _amountController.text = _maxInputAmount(inBalance);
-                  },
-                  icon: Icon(
-                    Icons.auto_fix_high_rounded,
-                    color: _accent,
-                    size: 28,
-                  ),
-                ),
-              ),
-            ),
-            const Gap(14),
-            Center(
-              child: GestureDetector(
-                onTap: _flipPair,
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Color(0xFFB84BFF), Color(0xFF6F33D1)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+            const Gap(16),
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: _flipPair,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color:
+                          _quotedOutRaw > BigInt.zero ||
+                              _inputRaw == BigInt.zero
+                          ? null
+                          : _swapFieldFill,
+                      gradient:
+                          _quotedOutRaw > BigInt.zero ||
+                              _inputRaw == BigInt.zero
+                          ? const LinearGradient(
+                              colors: [Color(0xFFAE27A5), Color(0xFF742CB2)],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            )
+                          : null,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x55090514),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.swap_vert_rounded,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-              ),
-            ),
-            const Gap(12),
-            _tokenRow(asset: outAsset, balance: outBalance),
-            const Gap(10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              decoration: BoxDecoration(
-                color: _swapSurfaceAlt,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _swapBorder.withOpacity(0.72)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Estimated Output',
-                    style: TextStyle(
-                      color: _swapHint,
-                      fontWeight: FontWeight.w800,
-                      fontSize: Styles.fsBodyStrong,
+                    child: Icon(
+                      Icons.repeat_rounded,
+                      size: 20,
+                      color:
+                          _quotedOutRaw > BigInt.zero ||
+                              _inputRaw == BigInt.zero
+                          ? Colors.white
+                          : _swapHint,
                     ),
                   ),
-                  const Gap(4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _quotedOutDisplay,
-                          style: TextStyle(
-                            color: _titleText,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 46 / 2,
-                            height: 1.0,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        outAsset.symbol,
-                        style: TextStyle(
-                          color: _bodyText,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 44 / 2,
-                          height: 1.0,
-                        ),
-                      ),
-                    ],
+                ),
+                const Gap(8),
+                Expanded(
+                  child: SendAmountSlider(
+                    value: sliderValue,
+                    enabled: !_isSubmittingSwap && !_isApproving,
+                    onChanged: (value) => _setSwapAmountFromSlider(
+                      balance: inBalance,
+                      ratio: value,
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Gap(14),
-            if (_isLoadingQuote)
-              LinearProgressIndicator(minHeight: 2, color: _accent),
-            const Gap(14),
+            const Gap(16),
+            _buildSwapTokenField(
+              asset: outAsset,
+              balance: outBalance,
+              amountText: _quotedOutDisplay,
+              readOnly: true,
+            ),
+            const Gap(16),
+            _buildSlippageSlider(),
+            const Gap(16),
+            _buildSwapSummary(
+              inAsset: inAsset,
+              outAsset: outAsset,
+              inputAmount: _amountController.text,
+            ),
+            if (_isLoadingQuote) ...[
+              const Gap(14),
+              LinearProgressIndicator(
+                minHeight: 2,
+                color: _accent,
+                backgroundColor: _swapSurfaceAlt.withOpacity(0.7),
+              ),
+            ],
+            const Gap(16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -1090,7 +1257,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                   backgroundColor: Colors.transparent,
                   disabledBackgroundColor: Colors.transparent,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   padding: EdgeInsets.zero,
                   shadowColor: Colors.transparent,
@@ -1099,18 +1266,21 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                 child: Ink(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: const BorderRadius.all(Radius.circular(14)),
                     color: isEnabled ? null : _swapButtonDisabled,
                     gradient: isEnabled
                         ? const LinearGradient(
+                            colors: [Color(0xFFAE27A5), Color(0xFF742CB2)],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
-                            colors: [Color(0xFFBE37A8), Color(0xFF6E35D4)],
                           )
                         : null,
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 15,
+                      horizontal: 22,
+                    ),
                     child: Text(
                       requiresApproval
                           ? (_isApproving
@@ -1118,14 +1288,12 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                                 : 'Approve ${inAsset.symbol}')
                           : (!hasSufficientBalance
                                 ? 'Insufficient ${inAsset.symbol}'
-                                : (_isSubmittingSwap
-                                      ? 'Swapping...'
-                                      : 'Confirm Swap')),
+                                : (_isSubmittingSwap ? 'Swapping...' : 'Swap')),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withOpacity(isEnabled ? 1 : 0.92),
                         fontWeight: FontWeight.w800,
-                        fontSize: 20,
+                        fontSize: 16,
                       ),
                     ),
                   ),
@@ -1138,65 +1306,382 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     );
   }
 
-  Widget _tokenRow({required _PoolAsset asset, required String balance}) {
+  Widget _buildSwapTokenField({
+    required _PoolAsset asset,
+    required String balance,
+    required String amountText,
+    FocusNode? focusNode,
+    VoidCallback? onTapMax,
+    bool readOnly = false,
+    bool showMaxButton = false,
+  }) {
     final showBalance = ref.watch(
       walletProvider.select((state) => state.showBalance),
     );
+    final isFocused = focusNode?.hasFocus ?? false;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _swapSurfaceAlt,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _swapBorder.withOpacity(0.8), width: 1.1),
-      ),
-      child: Row(
-        children: [
-          TokenAvatar(
-            size: 48,
-            iconUrl: asset.iconUrl,
-            fallbackSeed: asset.symbol,
-            resolveFallbackIcon: true,
-            useDeterministicFallback: true,
-            imageFit: BoxFit.contain,
-            imagePadding: const EdgeInsets.all(4),
-            avatarBackgroundColor: Colors.white,
-          ),
-          const Gap(10),
-          Expanded(
-            child: Text(
-              asset.symbol,
-              style: TextStyle(
-                color: _titleText,
-                fontWeight: FontWeight.w900,
-                fontSize: 46 / 2,
-              ),
+        color: isFocused
+            ? (_isDarkTheme ? _swapFieldFill : const Color(0xFFEEEBF6))
+            : _swapSurfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isFocused ? const Color(0xFFA328AB) : Colors.transparent,
+        ),
+        boxShadow: [
+          if (isFocused)
+            const BoxShadow(
+              blurRadius: 15,
+              spreadRadius: -8,
+              offset: Offset(0, 10),
+              color: Color(0x40A328AB),
             ),
-          ),
-          SizedBox(
-            width: 170,
-            child: BlurableContent(
-              showContent: showBalance,
-              child: FittedBox(
-                alignment: Alignment.centerRight,
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  '${AmountUtils.formatCompactToken(balance)} ${asset.symbol}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: _bodyText,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 42 / 2,
-                  ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              TokenAvatar(
+                size: 48,
+                iconUrl: asset.iconUrl,
+                fallbackSeed: asset.symbol,
+                resolveFallbackIcon: true,
+                useDeterministicFallback: true,
+                imageFit: BoxFit.contain,
+                imagePadding: const EdgeInsets.all(4),
+                avatarBackgroundColor: Colors.white,
+              ),
+              const Gap(13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      asset.symbol,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _titleText,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const Gap(2),
+                    BlurableContent(
+                      showContent: showBalance,
+                      child: Text(
+                        '${AmountUtils.formatCompactToken(balance)} ${asset.symbol}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _swapHint,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+              Expanded(
+                child: readOnly
+                    ? BlurableContent(
+                        showContent: showBalance,
+                        child: Text(
+                          '${AmountUtils.trimTrailingZeros(amountText)} ${asset.symbol}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: _titleText,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                          ),
+                        ),
+                      )
+                    : TextField(
+                        focusNode: focusNode,
+                        controller: _amountController,
+                        readOnly: _isSubmittingSwap || _isApproving,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: _titleText,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          fillColor: Colors.transparent,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          enabledBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          border: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          hintText: '0.0',
+                          hintStyle: TextStyle(
+                            color: _swapHint,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          suffixIcon: onTapMax == null
+                              ? null
+                              : IconButton(
+                                  onPressed: onTapMax,
+                                  splashRadius: 18,
+                                  icon: Icon(
+                                    Icons.auto_fix_high_rounded,
+                                    color: _accent,
+                                    size: 22,
+                                  ),
+                                ),
+                        ),
+                      ),
+              ),
+            ],
           ),
+          if (showMaxButton) ...[
+            const Gap(8),
+            SizedBox(
+              width: double.infinity,
+              child: Row(
+                children: [
+                  BlurableContent(
+                    showContent: showBalance,
+                    child: Text(
+                      'Balance: ${_formatBalanceText(balance)} ${asset.symbol}',
+                      style: TextStyle(
+                        color: _swapHint,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (onTapMax != null)
+                    TextButton(
+                      onPressed: onTapMax,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(30, 10),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        'Max',
+                        style: TextStyle(color: Colors.blue, fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  void _setSwapAmountFromSlider({
+    required String balance,
+    required double ratio,
+  }) {
+    final parsedBalance = AmountUtils.parseNumeric(balance);
+    if (parsedBalance <= 0 || ratio <= 0) {
+      _amountController.text = '0';
+      return;
+    }
+    final amount = parsedBalance * ratio;
+    _amountController.text = AmountUtils.formatInputAmount(
+      amount,
+      decimals: amount >= 10 ? 4 : 6,
+    );
+  }
+
+  Widget _buildSwapSummary({
+    required _PoolAsset inAsset,
+    required _PoolAsset outAsset,
+    required String inputAmount,
+  }) {
+    final rate = _inputToken0
+        ? AmountUtils.formatRate(widget.pool.token0Price)
+        : AmountUtils.formatRate(widget.pool.token1Price);
+    final inputValue = AmountUtils.parseNumeric(inputAmount);
+    final inputUsdPrice = _inputToken0
+        ? widget.pool.token0Price
+        : widget.pool.token1Price;
+    final estimatedFeeUsd = math.max(inputValue * inputUsdPrice * 0.003, 0);
+    final slippage = '${_slippagePercent.toStringAsFixed(2)}%';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: _swapSurfaceAlt,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          _buildSwapSummaryRow(
+            label: 'Rate',
+            value: '1 ${inAsset.symbol} = $rate ${outAsset.symbol}',
+          ),
+          const Gap(8),
+          _buildSwapSummaryRow(
+            label: 'Fee',
+            value: '\$${estimatedFeeUsd.toStringAsFixed(4)}',
+          ),
+          const Gap(8),
+          _buildSwapSummaryRow(label: 'Slippage', value: slippage),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwapSummaryRow({required String label, required String value}) {
+    return Row(
+      children: [
+        Text(
+          '$label: ',
+          style: TextStyle(
+            color: _accent,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _titleText,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlippageSlider() {
+    return Row(
+      children: [
+        Text(
+          'Slippage :',
+          style: TextStyle(
+            color: _swapHint,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderThemeData(
+              showValueIndicator: ShowValueIndicator.never,
+              overlayShape: SliderComponentShape.noOverlay,
+              valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
+              valueIndicatorColor: _themeColors.accentStrong,
+              valueIndicatorTextStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+              thumbColor: _themeColors.accentStrong,
+              inactiveTrackColor: _themeColors.inputBorder.withOpacity(0.32),
+              activeTrackColor: _themeColors.accent,
+              inactiveTickMarkColor: _themeColors.inputBorder.withOpacity(0.45),
+              activeTickMarkColor: Colors.white,
+              tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 3),
+              thumbShape: const AlwaysVisibleSliderThumbShape(),
+              disabledInactiveTrackColor: _themeColors.inputBorder.withOpacity(
+                0.18,
+              ),
+              disabledActiveTrackColor: _themeColors.accentStrong.withOpacity(
+                0.2,
+              ),
+            ),
+            child: Slider(
+              value: _slippagePercent.clamp(0.0, 20.0),
+              min: 0,
+              max: 20,
+              divisions: 200,
+              label: '${_slippagePercent.toStringAsFixed(1)}%',
+              onChanged: (_isSubmittingSwap || _isApproving)
+                  ? null
+                  : (value) => setState(() => _slippagePercent = value),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatBalanceText(String balance) {
+    final parsed = AmountUtils.parseNumeric(balance);
+    if (parsed <= 0) return '0';
+    return AmountUtils.formatInputAmount(
+      parsed,
+      decimals: parsed >= 10 ? 4 : 6,
+    );
+  }
+
+  bool _canUseDirectPairSwap(_PoolAsset inAsset, _PoolAsset outAsset) {
+    return widget.pool.id.trim().isNotEmpty &&
+        inAsset.address.trim().isNotEmpty &&
+        outAsset.address.trim().isNotEmpty &&
+        inAsset.address.toLowerCase() != outAsset.address.toLowerCase();
+  }
+
+  Future<BigInt> _quoteDirectPairSwap({
+    required BigInt amountIn,
+    required _PoolAsset inAsset,
+    required _PoolAsset outAsset,
+  }) async {
+    if (amountIn <= BigInt.zero) return BigInt.zero;
+
+    final web3 = ref.read(web3ServiceProvider);
+    final (reserve0, reserve1) = await web3.getPairReservesRaw(
+      pairAddress: widget.pool.id,
+    );
+    final inputIsToken0 =
+        widget.pool.token0Address.toLowerCase() ==
+        inAsset.address.toLowerCase();
+    final reserveIn = inputIsToken0 ? reserve0 : reserve1;
+    final reserveOut = inputIsToken0 ? reserve1 : reserve0;
+    return _getAmountOutRaw(amountIn, reserveIn, reserveOut);
+  }
+
+  BigInt _getAmountOutRaw(
+    BigInt amountIn,
+    BigInt reserveIn,
+    BigInt reserveOut,
+  ) {
+    if (amountIn <= BigInt.zero ||
+        reserveIn <= BigInt.zero ||
+        reserveOut <= BigInt.zero) {
+      return BigInt.zero;
+    }
+    final amountInWithFee = amountIn * BigInt.from(997);
+    final numerator = amountInWithFee * reserveOut;
+    final denominator = (reserveIn * BigInt.from(1000)) + amountInWithFee;
+    if (denominator <= BigInt.zero) return BigInt.zero;
+    return numerator ~/ denominator;
   }
 
   List<_ChartPoint> _buildChartSeries(
@@ -1336,7 +1821,22 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   }
 
   String _balanceForAsset(WalletState state, _PoolAsset asset) {
-    if (asset.isNative) return state.balance;
+    if (asset.isCanonicalReef) {
+      final nativeBalance = AmountUtils.parseNumeric(state.balance);
+      final wrappedBalance = state.portfolioTokens
+          .where(
+            (token) =>
+                token.address.toLowerCase() == asset.address.toLowerCase(),
+          )
+          .fold<double>(
+            0,
+            (sum, token) => sum + AmountUtils.parseNumeric(token.balance),
+          );
+      return AmountUtils.formatInputAmount(
+        nativeBalance + wrappedBalance,
+        decimals: 6,
+      );
+    }
     for (final token in state.portfolioTokens) {
       if (token.address.toLowerCase() == asset.address.toLowerCase()) {
         return token.balance;
@@ -1446,21 +1946,16 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     required BigInt amountOutMin,
     required BigInt deadline,
     required List<String> path,
+    required bool useDirectPair,
   }) async {
     final web3 = ref.read(web3ServiceProvider);
     final chainId = await web3.getChainId();
     final gasPriceWei = await web3.getGasPriceWei();
-    final gasLimit = web3.swapGasLimit;
+    final gasLimit = useDirectPair ? web3.pairSwapGasLimit : web3.swapGasLimit;
     final feeWei = gasPriceWei * BigInt.from(gasLimit);
 
-    final methodName = inAsset.isNative
-        ? 'swapExactETHForTokens'
-        : (outAsset.isNative
-              ? 'swapExactTokensForETH'
-              : 'swapExactTokensForTokens');
-    final calldata = inAsset.isNative
-        ? '0x7ff36ab5…'
-        : (outAsset.isNative ? '0x18cbafe5…' : '0x38ed1739…');
+    final methodName = useDirectPair ? 'pair.swap' : 'swapExactTokensForTokens';
+    final calldata = useDirectPair ? 'pair transfer + swap' : '0x38ed1739…';
 
     return TransactionPreview(
       title: 'Swap Tokens',
@@ -1470,15 +1965,15 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
           '${_amountController.text.trim()} ${inAsset.symbol} -> $_quotedOutDisplay ${outAsset.symbol}',
       networkName: _networkNameForChainId(chainId),
       chainId: chainId,
-      contractAddress: DexConfig.routerAddress,
+      contractAddress: useDirectPair ? widget.pool.id : DexConfig.routerAddress,
       gasLimit: gasLimit,
       gasPriceWei: gasPriceWei,
       estimatedFeeDisplay: _formatFeeDisplay(feeWei),
       calldataHex: calldata,
       fields: <TransactionPreviewField>[
         TransactionPreviewField(
-          label: 'Router',
-          value: DexConfig.routerAddress,
+          label: useDirectPair ? 'Pair' : 'Router',
+          value: useDirectPair ? widget.pool.id : DexConfig.routerAddress,
         ),
         TransactionPreviewField(
           label: 'Amount In (raw)',
@@ -1488,9 +1983,16 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
           label: 'Amount Out Min (raw)',
           value: amountOutMin.toString(),
         ),
-        TransactionPreviewField(label: 'Path', value: path.join(' -> ')),
+        TransactionPreviewField(
+          label: useDirectPair ? 'Trade Path' : 'Path',
+          value: path.join(' -> '),
+        ),
         TransactionPreviewField(label: 'To', value: accountAddress),
-        TransactionPreviewField(label: 'Deadline', value: deadline.toString()),
+        if (!useDirectPair)
+          TransactionPreviewField(
+            label: 'Deadline',
+            value: deadline.toString(),
+          ),
       ],
     );
   }
@@ -1518,6 +2020,7 @@ class _PoolAsset {
     required this.decimals,
     required this.iconUrl,
     required this.isNative,
+    required this.isCanonicalReef,
   });
 
   final String symbol;
@@ -1526,10 +2029,11 @@ class _PoolAsset {
   final int decimals;
   final String? iconUrl;
   final bool isNative;
+  final bool isCanonicalReef;
 
   static _PoolAsset fromPool(Pool pool, {required bool isToken0}) {
     final symbol = isToken0 ? pool.token0Symbol : pool.token1Symbol;
-    final address = isToken0 ? pool.token0Address : pool.token1Address;
+    final rawAddress = isToken0 ? pool.token0Address : pool.token1Address;
     final decimals = isToken0 ? pool.token0Decimals : pool.token1Decimals;
     final icon = isToken0
         ? (pool.tokenIcons.isNotEmpty ? pool.tokenIcons[0] : null)
@@ -1537,17 +2041,19 @@ class _PoolAsset {
     final isReefLike =
         symbol.toUpperCase() == 'REEF' ||
         symbol.toUpperCase() == 'WREEF' ||
-        address.toLowerCase() == DexConfig.wrappedReefAddress.toLowerCase();
+        rawAddress.toLowerCase() == DexConfig.wrappedReefAddress.toLowerCase();
+    final resolvedAddress = isReefLike
+        ? DexConfig.wrappedReefAddress
+        : rawAddress;
 
     return _PoolAsset(
       symbol: isReefLike ? 'REEF' : symbol,
-      address: address,
-      routerAddress: isReefLike
-          ? (address.isNotEmpty ? address : DexConfig.wrappedReefAddress)
-          : address,
+      address: resolvedAddress,
+      routerAddress: resolvedAddress,
       decimals: decimals,
       iconUrl: icon,
-      isNative: isReefLike,
+      isNative: false,
+      isCanonicalReef: isReefLike,
     );
   }
 }

@@ -31,7 +31,7 @@ class Web3Service {
   static const String _wrappedNativeAbiJson =
       '[{"inputs":[],"name":"deposit","outputs":[],"stateMutability":"payable","type":"function"}]';
   static const String _pairAbiJson =
-      '[{"inputs":[{"internalType":"address","name":"to","type":"address"}],"name":"mint","outputs":[{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"nonpayable","type":"function"}]';
+      '[{"inputs":[],"name":"getReserves","outputs":[{"internalType":"uint112","name":"reserve0","type":"uint112"},{"internalType":"uint112","name":"reserve1","type":"uint112"},{"internalType":"uint32","name":"blockTimestampLast","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount0Out","type":"uint256"},{"internalType":"uint256","name":"amount1Out","type":"uint256"},{"internalType":"address","name":"to","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"swap","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"}],"name":"mint","outputs":[{"internalType":"uint256","name":"liquidity","type":"uint256"}],"stateMutability":"nonpayable","type":"function"}]';
 
   static const String _routerAbiJson =
       '[{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"}],"name":"getAmountsOut","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactETHForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForETH","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"}]';
@@ -51,7 +51,7 @@ class Web3Service {
   static const int _addLiquidityEthGasLimit = 2600000;
   static const int _wrapNativeGasLimit = 350000;
   static const int _pairMintGasLimit = 900000;
-
+  static const int _pairSwapGasLimit = 1200000;
   int get nativeTransferGasLimit => _nativeTransferGasLimit;
   int get erc20TransferGasLimit => _erc20TransferGasLimit;
   int get erc20ApproveGasLimit => _erc20ApproveGasLimit;
@@ -61,6 +61,7 @@ class Web3Service {
   int get addLiquidityEthGasLimit => _addLiquidityEthGasLimit;
   int get wrapNativeGasLimit => _wrapNativeGasLimit;
   int get pairMintGasLimit => _pairMintGasLimit;
+  int get pairSwapGasLimit => _pairSwapGasLimit;
 
   Future<String> getBalance(String address) async {
     final rpcBalance = await _getBalanceViaRpc(address);
@@ -128,6 +129,28 @@ class Web3Service {
       transaction: tx,
       contextLabel: 'native_transfer',
       debugExtras: <String, dynamic>{'to': to, 'amount': amountStr},
+    );
+  }
+
+  Future<int> estimateNativeTransferGasLimit({
+    required String fromAddress,
+    required String toAddress,
+    required BigInt amountWei,
+  }) async {
+    final sender = _parseAddressOrThrow(fromAddress, field: 'sender');
+    final recipient = _parseAddressOrThrow(toAddress, field: 'recipient');
+    final gasPriceWei = await getGasPriceWei();
+    final tx = Transaction(
+      from: sender,
+      to: recipient,
+      value: EtherAmount.inWei(amountWei),
+      gasPrice: EtherAmount.inWei(gasPriceWei),
+      maxGas: _nativeTransferGasLimit,
+    );
+    return _resolveGasLimit(
+      tx,
+      sender,
+      contextLabel: 'native_transfer/preview',
     );
   }
 
@@ -618,6 +641,63 @@ class Web3Service {
     );
   }
 
+  Future<(BigInt reserve0, BigInt reserve1)> getPairReservesRaw({
+    required String pairAddress,
+  }) async {
+    final pair = DeployedContract(
+      ContractAbi.fromJson(_pairAbiJson, 'ReefswapPair'),
+      _parseAddressOrThrow(pairAddress, field: 'pair'),
+    );
+    final getReserves = pair.function('getReserves');
+    final response = await _client.call(
+      contract: pair,
+      function: getReserves,
+      params: const <dynamic>[],
+    );
+    if (response.length < 2 ||
+        response[0] is! BigInt ||
+        response[1] is! BigInt) {
+      throw Exception('Unable to load pair reserves.');
+    }
+    return (response[0] as BigInt, response[1] as BigInt);
+  }
+
+  Future<String> swapPair({
+    required Account account,
+    required String pairAddress,
+    required BigInt amount0Out,
+    required BigInt amount1Out,
+    required String to,
+  }) async {
+    final pair = DeployedContract(
+      ContractAbi.fromJson(_pairAbiJson, 'ReefswapPair'),
+      _parseAddressOrThrow(pairAddress, field: 'pair'),
+    );
+    final swap = pair.function('swap');
+    final tx = Transaction.callContract(
+      contract: pair,
+      function: swap,
+      parameters: <dynamic>[
+        amount0Out,
+        amount1Out,
+        _parseAddressOrThrow(to, field: 'recipient'),
+        Uint8List(0),
+      ],
+      maxGas: _pairSwapGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: tx,
+      contextLabel: 'pair_swap',
+      debugExtras: <String, dynamic>{
+        'pairAddress': pairAddress,
+        'amount0Out': amount0Out.toString(),
+        'amount1Out': amount1Out.toString(),
+        'to': to,
+      },
+    );
+  }
+
   Future<String> mintPair({
     required Account account,
     required String pairAddress,
@@ -921,6 +1001,12 @@ class Web3Service {
       throw Exception(mapped);
     } catch (e) {
       print('[tx][error] context=$contextLabel error=$e');
+      final raw = e.toString();
+      if (raw.toLowerCase().contains('rpcerror') ||
+          raw.toLowerCase().contains('contracttrapped') ||
+          raw.toLowerCase().contains('failed to instantiate contract')) {
+        throw Exception(TransactionErrorMapper.fromThrowable(e).message);
+      }
       rethrow;
     }
   }
@@ -991,14 +1077,12 @@ class Web3Service {
     );
 
     if (estimatedLimit != null && estimatedLimit > BigInt.zero) {
-      final bufferedEstimate =
-          ((estimatedLimit * BigInt.from(12)) ~/ BigInt.from(10)); // +20%
-      final bufferedInt = bufferedEstimate.toInt();
-      final chosen = configuredLimit != null && configuredLimit > bufferedInt
+      final estimatedInt = estimatedLimit.toInt();
+      final chosen = configuredLimit != null && configuredLimit > estimatedInt
           ? configuredLimit
-          : bufferedInt;
+          : estimatedInt;
       print(
-        '[tx][gas] context=$contextLabel configured=${configuredLimit ?? 'null'} estimated=$estimatedLimit buffered=$bufferedInt chosen=$chosen',
+        '[tx][gas] context=$contextLabel configured=${configuredLimit ?? 'null'} estimated=$estimatedLimit chosen=$chosen',
       );
       return chosen;
     }

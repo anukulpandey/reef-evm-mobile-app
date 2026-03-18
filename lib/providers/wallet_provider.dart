@@ -346,12 +346,11 @@ class WalletNotifier extends Notifier<WalletState> {
     required String rpcBalance,
     required String? explorerBalance,
   }) {
-    final rpc = AmountUtils.parseNumeric(rpcBalance);
-    final explorer = AmountUtils.parseNumeric(explorerBalance ?? '0');
+    final normalizedRpc = rpcBalance.trim();
+    if (normalizedRpc.isNotEmpty) return normalizedRpc;
 
-    if (explorer > 0 && rpc <= 0) return explorerBalance!;
-    if (rpc > 0 && explorer <= 0) return rpcBalance;
-    if (explorer > rpc) return explorerBalance ?? rpcBalance;
+    final normalizedExplorer = explorerBalance?.trim() ?? '';
+    if (normalizedExplorer.isNotEmpty) return normalizedExplorer;
     return rpcBalance;
   }
 
@@ -618,10 +617,7 @@ class WalletNotifier extends Notifier<WalletState> {
     final web3Service = ref.read(web3ServiceProvider);
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final isNative =
-          token.address == 'native' ||
-          token.symbol.toUpperCase() == 'REEF' ||
-          token.symbol.toUpperCase() == 'WREEF';
+      final isNative = token.address == 'native';
 
       final txHash = isNative
           ? await web3Service.sendEth(account, to, amount)

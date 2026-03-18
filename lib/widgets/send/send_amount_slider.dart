@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/reef_theme_colors.dart';
 import '../../core/theme/styles.dart';
+import '../common/always_visible_slider_thumb_shape.dart';
 
 class SendAmountSlider extends StatelessWidget {
   const SendAmountSlider({
@@ -16,6 +18,7 @@ class SendAmountSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.reefColors;
     return Column(
       children: [
         SliderTheme(
@@ -24,30 +27,33 @@ class SendAmountSlider extends StatelessWidget {
             overlayShape: SliderComponentShape.noOverlay,
             valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
             valueIndicatorColor: Styles.secondaryAccentColorDark,
-            valueIndicatorTextStyle: const TextStyle(
+            valueIndicatorTextStyle: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
             thumbColor: Styles.secondaryAccentColorDark,
-            inactiveTickMarkColor: const Color(0xffc0b8dc),
+            inactiveTickMarkColor: colors.inputBorder.withOpacity(0.45),
             trackShape: const _GradientRectSliderTrackShape(
               gradient: Styles.buttonGradient,
               darkenInactive: true,
             ),
             activeTickMarkColor: const Color(0xffffffff),
             tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 4),
-            thumbShape: const _ThumbShape(),
+            thumbShape: const AlwaysVisibleSliderThumbShape(),
+            inactiveTrackColor: colors.inputBorder.withOpacity(0.3),
+            disabledInactiveTrackColor: colors.inputBorder.withOpacity(0.18),
+            disabledActiveTrackColor: colors.accentStrong.withOpacity(0.2),
           ),
           child: Slider(
             value: value,
             onChanged: enabled ? onChanged : null,
-            inactiveColor: Colors.white24,
+            inactiveColor: colors.inputBorder.withOpacity(0.32),
             divisions: 100,
             label: '${(value * 100).toInt()}%',
           ),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -55,7 +61,7 @@ class SendAmountSlider extends StatelessWidget {
               Text(
                 '0%',
                 style: TextStyle(
-                  color: Color(0xFF7E7892),
+                  color: colors.textMuted,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
@@ -63,7 +69,7 @@ class SendAmountSlider extends StatelessWidget {
               Text(
                 '50%',
                 style: TextStyle(
-                  color: Color(0xFF7E7892),
+                  color: colors.textMuted,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
@@ -71,7 +77,7 @@ class SendAmountSlider extends StatelessWidget {
               Text(
                 '100%',
                 style: TextStyle(
-                  color: Color(0xFF7E7892),
+                  color: colors.textMuted,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
@@ -182,58 +188,6 @@ class _GradientRectSliderTrackShape extends SliderTrackShape
             : trackRadius,
       ),
       rightTrackPaint,
-    );
-  }
-}
-
-class _ThumbShape extends RoundSliderThumbShape {
-  const _ThumbShape();
-
-  final _indicatorShape = const PaddleSliderValueIndicatorShape();
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
-    required Animation<double> activationAnimation,
-    required Animation<double> enableAnimation,
-    required bool isDiscrete,
-    required TextPainter labelPainter,
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required TextDirection textDirection,
-    required double value,
-    required double textScaleFactor,
-    required Size sizeWithOverflow,
-  }) {
-    super.paint(
-      context,
-      center,
-      activationAnimation: activationAnimation,
-      enableAnimation: enableAnimation,
-      sliderTheme: sliderTheme,
-      value: value,
-      textScaleFactor: textScaleFactor,
-      sizeWithOverflow: sizeWithOverflow,
-      isDiscrete: isDiscrete,
-      labelPainter: labelPainter,
-      parentBox: parentBox,
-      textDirection: textDirection,
-    );
-
-    _indicatorShape.paint(
-      context,
-      center,
-      activationAnimation: const AlwaysStoppedAnimation(1),
-      enableAnimation: enableAnimation,
-      labelPainter: labelPainter,
-      parentBox: parentBox,
-      sliderTheme: sliderTheme,
-      value: value,
-      textScaleFactor: 0.8,
-      sizeWithOverflow: sizeWithOverflow,
-      isDiscrete: isDiscrete,
-      textDirection: textDirection,
     );
   }
 }

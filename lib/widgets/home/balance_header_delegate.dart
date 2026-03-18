@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/reef_theme_colors.dart';
 import '../../core/theme/styles.dart';
 import '../blurable_content.dart';
 import '../official_components.dart';
@@ -25,6 +26,7 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
+    final colors = context.reefColors;
     if (shrinkOffset > 80) {
       return const SizedBox.shrink();
     }
@@ -52,10 +54,10 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                     children: [
                       Text(
                         balanceTitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: Styles.primaryColor,
+                          color: colors.textPrimary,
                         ),
                       ),
                       IconButton(
@@ -68,7 +70,7 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                           showBalance
                               ? Icons.remove_red_eye
                               : Icons.visibility_off,
-                          color: Styles.textLightColor,
+                          color: colors.textMuted,
                         ),
                         onPressed: onToggleVisibility,
                       ),
@@ -90,7 +92,7 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                       style: GoogleFonts.poppins(
                         fontSize: 48,
                         fontWeight: FontWeight.w800,
-                        color: Styles.textColor,
+                        color: colors.textPrimary,
                         letterSpacing: 2,
                       ),
                     ),

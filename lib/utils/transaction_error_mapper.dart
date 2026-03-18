@@ -53,6 +53,16 @@ class TransactionErrorMapper {
       );
     }
 
+    if (normalized.contains('contracttrapped') ||
+        normalized.contains('failed to instantiate contract') ||
+        normalized.contains('moduleerror')) {
+      return const TransactionUiError(
+        title: 'Transaction failed',
+        message:
+            'The selected contract call was rejected by the chain. Please retry with the current pool route or adjust the token pair.',
+      );
+    }
+
     if (normalized.contains('invalid transaction parameters') ||
         normalized.contains('gas') ||
         normalized.contains('intrinsic') ||

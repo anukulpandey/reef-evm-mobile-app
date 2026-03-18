@@ -35,88 +35,16 @@ Future<String?> showRenameAccountDialog({
   required String currentName,
 }) async {
   final normalizedCurrent = currentName.trim();
-  final controller = TextEditingController(
-    text: (normalizedCurrent == '<No Name>' || normalizedCurrent == l10n.noName)
-        ? ''
-        : normalizedCurrent,
-  );
+  final initialName =
+      (normalizedCurrent == '<No Name>' || normalizedCurrent == l10n.noName)
+      ? ''
+      : normalizedCurrent;
 
-  try {
-    return await showDialog<String>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (localContext, setState) {
-            final palette = _dialogPalette(localContext);
-            final canSave = controller.text.trim().isNotEmpty;
-            return AlertDialog(
-              backgroundColor: palette.background,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              title: Text(
-                l10n.renameAccountTitle,
-                style: TextStyle(
-                  color: palette.title,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                cursorColor: palette.accent,
-                style: TextStyle(
-                  color: palette.inputText,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: _dialogInputDecoration(
-                  palette: palette,
-                  labelText: l10n.accountNameLabel,
-                  hintText: l10n.noName,
-                ),
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) {
-                  if (!canSave) return;
-                  Navigator.pop(dialogContext, controller.text.trim());
-                },
-              ),
-              actions: [
-                TextButton(
-                  style: _dialogActionButtonStyle(),
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: Text(
-                    l10n.cancel,
-                    style: TextStyle(color: palette.actionText),
-                  ),
-                ),
-                TextButton(
-                  style: _dialogActionButtonStyle(),
-                  onPressed: canSave
-                      ? () =>
-                            Navigator.pop(dialogContext, controller.text.trim())
-                      : null,
-                  child: Text(
-                    l10n.save,
-                    style: TextStyle(
-                      color: canSave
-                          ? palette.actionText
-                          : palette.actionText.withOpacity(0.45),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  } finally {
-    controller.dispose();
-  }
+  return showDialog<String>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => _RenameAccountDialog(l10n: l10n, initialName: initialName),
+  );
 }
 
 Future<bool> confirmExportWithPassword({
@@ -133,109 +61,211 @@ Future<bool> confirmExportWithPassword({
     return false;
   }
 
-  final controller = TextEditingController();
-  try {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        bool invalidPassword = false;
-        bool loading = false;
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => _ExportPasswordDialog(l10n: l10n, authService: authService),
+  );
+  return result ?? false;
+}
 
-        return StatefulBuilder(
-          builder: (localContext, setState) {
-            final palette = _dialogPalette(localContext);
-            Future<void> submit() async {
-              final input = controller.text.trim();
-              if (input.isEmpty) {
-                setState(() => invalidPassword = true);
-                return;
-              }
-              setState(() => loading = true);
-              final isValid = await authService.verifyAppPassword(input);
-              if (isValid) {
-                if (!dialogContext.mounted) return;
-                Navigator.pop(dialogContext, true);
-                return;
-              }
-              if (!dialogContext.mounted) return;
-              setState(() {
-                loading = false;
-                invalidPassword = true;
-              });
-            }
+class _RenameAccountDialog extends StatefulWidget {
+  final AppLocalizations l10n;
+  final String initialName;
 
-            return AlertDialog(
-              backgroundColor: palette.background,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              title: Text(
-                l10n.exportAccount,
-                style: TextStyle(
-                  color: palette.title,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                obscureText: true,
-                textInputAction: TextInputAction.done,
-                cursorColor: palette.accent,
-                style: TextStyle(
-                  color: palette.inputText,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: _dialogInputDecoration(
-                  palette: palette,
-                  labelText: l10n.enterAppPassword,
-                  errorText: invalidPassword ? l10n.invalidPassword : null,
-                ),
-                onChanged: (_) {
-                  if (!invalidPassword) return;
-                  setState(() => invalidPassword = false);
-                },
-                onSubmitted: (_) => submit(),
-              ),
-              actions: [
-                TextButton(
-                  style: _dialogActionButtonStyle(),
-                  onPressed: loading
-                      ? null
-                      : () => Navigator.pop(dialogContext, false),
-                  child: Text(
-                    l10n.cancel,
-                    style: TextStyle(
-                      color: loading
-                          ? palette.actionText.withOpacity(0.45)
-                          : palette.actionText,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  style: _dialogActionButtonStyle(),
-                  onPressed: loading ? null : submit,
-                  child: Text(
-                    l10n.exportAccount,
-                    style: TextStyle(
-                      color: loading
-                          ? palette.actionText.withOpacity(0.45)
-                          : palette.actionText,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+  const _RenameAccountDialog({required this.l10n, required this.initialName});
+
+  @override
+  State<_RenameAccountDialog> createState() => _RenameAccountDialogState();
+}
+
+class _RenameAccountDialogState extends State<_RenameAccountDialog> {
+  late final TextEditingController _controller;
+
+  bool get _canSave => _controller.text.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_canSave) return;
+    Navigator.pop(context, _controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _dialogPalette(context);
+    return AlertDialog(
+      backgroundColor: palette.background,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text(
+        widget.l10n.renameAccountTitle,
+        style: TextStyle(
+          color: palette.title,
+          fontSize: 24,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        cursorColor: palette.accent,
+        style: TextStyle(
+          color: palette.inputText,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: _dialogInputDecoration(
+          palette: palette,
+          labelText: widget.l10n.accountNameLabel,
+          hintText: widget.l10n.noName,
+        ),
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          style: _dialogActionButtonStyle(),
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            widget.l10n.cancel,
+            style: TextStyle(color: palette.actionText),
+          ),
+        ),
+        TextButton(
+          style: _dialogActionButtonStyle(),
+          onPressed: _canSave ? _submit : null,
+          child: Text(
+            widget.l10n.save,
+            style: TextStyle(
+              color: _canSave
+                  ? palette.actionText
+                  : palette.actionText.withOpacity(0.45),
+            ),
+          ),
+        ),
+      ],
     );
-    return result ?? false;
-  } finally {
-    controller.dispose();
+  }
+}
+
+class _ExportPasswordDialog extends StatefulWidget {
+  final AppLocalizations l10n;
+  final AuthService authService;
+
+  const _ExportPasswordDialog({required this.l10n, required this.authService});
+
+  @override
+  State<_ExportPasswordDialog> createState() => _ExportPasswordDialogState();
+}
+
+class _ExportPasswordDialogState extends State<_ExportPasswordDialog> {
+  final TextEditingController _controller = TextEditingController();
+  bool _invalidPassword = false;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final input = _controller.text.trim();
+    if (input.isEmpty) {
+      if (!mounted) return;
+      setState(() => _invalidPassword = true);
+      return;
+    }
+
+    setState(() => _loading = true);
+    final isValid = await widget.authService.verifyAppPassword(input);
+    if (!mounted) return;
+
+    if (isValid) {
+      Navigator.pop(context, true);
+      return;
+    }
+
+    setState(() {
+      _loading = false;
+      _invalidPassword = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _dialogPalette(context);
+    return AlertDialog(
+      backgroundColor: palette.background,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text(
+        widget.l10n.exportAccount,
+        style: TextStyle(
+          color: palette.title,
+          fontSize: 24,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        obscureText: true,
+        textInputAction: TextInputAction.done,
+        cursorColor: palette.accent,
+        style: TextStyle(
+          color: palette.inputText,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: _dialogInputDecoration(
+          palette: palette,
+          labelText: widget.l10n.enterAppPassword,
+          errorText: _invalidPassword ? widget.l10n.invalidPassword : null,
+        ),
+        onChanged: (_) {
+          if (!_invalidPassword) return;
+          setState(() => _invalidPassword = false);
+        },
+        onSubmitted: (_) => _loading ? null : _submit(),
+      ),
+      actions: [
+        TextButton(
+          style: _dialogActionButtonStyle(),
+          onPressed: _loading ? null : () => Navigator.pop(context, false),
+          child: Text(
+            widget.l10n.cancel,
+            style: TextStyle(
+              color: _loading
+                  ? palette.actionText.withOpacity(0.45)
+                  : palette.actionText,
+            ),
+          ),
+        ),
+        TextButton(
+          style: _dialogActionButtonStyle(),
+          onPressed: _loading ? null : _submit,
+          child: Text(
+            widget.l10n.exportAccount,
+            style: TextStyle(
+              color: _loading
+                  ? palette.actionText.withOpacity(0.45)
+                  : palette.actionText,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

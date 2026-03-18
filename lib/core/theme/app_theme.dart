@@ -79,6 +79,17 @@ class AppTheme {
         color: colors.cardBackground,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: colors.cardBackgroundSecondary,
+        contentTextStyle: GoogleFonts.poppins(
+          color: colors.textPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        actionTextColor: colors.accentStrong,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
       extensions: const <ThemeExtension<dynamic>>[ReefThemeColors.light],
       useMaterial3: true,
     );
@@ -159,6 +170,17 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: colors.cardBackground,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: colors.cardBackgroundSecondary,
+        contentTextStyle: GoogleFonts.poppins(
+          color: colors.textPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        actionTextColor: colors.accent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       extensions: const <ThemeExtension<dynamic>>[ReefThemeColors.dark],
       useMaterial3: true,
