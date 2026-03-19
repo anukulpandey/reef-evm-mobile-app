@@ -219,13 +219,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         },
         style: GoogleFonts.spaceGrotesk(
           color: colors.textPrimary,
-          fontSize: 19,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
         decoration: InputDecoration(
           hintText: AppLocalizations.of(context).enterAppPassword,
-          hintStyle: TextStyle(
+          hintStyle: GoogleFonts.spaceGrotesk(
             color: colors.textMuted,
+            fontSize: 17,
             fontWeight: FontWeight.w500,
           ),
           filled: false,

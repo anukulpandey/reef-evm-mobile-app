@@ -10,6 +10,7 @@ import '../models/transaction_preview.dart';
 import '../providers/service_providers.dart';
 import '../utils/address_utils.dart';
 import '../utils/transaction_error_mapper.dart';
+import 'transaction_progress_screen.dart';
 
 class TransactionConfirmationScreen extends ConsumerStatefulWidget {
   const TransactionConfirmationScreen({
@@ -38,6 +39,8 @@ class TransactionConfirmationScreen extends ConsumerStatefulWidget {
 class _TransactionConfirmationScreenState
     extends ConsumerState<TransactionConfirmationScreen> {
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
   bool _hasPassword = true;
   bool _isSubmitting = false;
   bool _obscurePassword = true;
@@ -60,6 +63,8 @@ class _TransactionConfirmationScreenState
   @override
   void dispose() {
     _passwordController.dispose();
+    _passwordFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -102,6 +107,7 @@ class _TransactionConfirmationScreenState
     }
 
     if (password.isEmpty) {
+      _scrollToPasswordSection();
       _setInlineError(
         'Enter wallet password to continue.',
         title: 'Wallet password required',
@@ -147,11 +153,28 @@ class _TransactionConfirmationScreenState
         return;
       }
 
-      final txHash = await widget.onApprove!();
+      final progressOutcome = await Navigator.of(context)
+          .push<TransactionProgressOutcome>(
+            MaterialPageRoute(
+              builder: (_) => TransactionProgressScreen(
+                preview: widget.preview,
+                runTransaction: widget.onApprove!,
+              ),
+            ),
+          );
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pop(TransactionApprovalResult(approved: true, txHash: txHash));
+      if (progressOutcome == null || !progressOutcome.completed) {
+        setState(() {
+          _isSubmitting = false;
+        });
+        return;
+      }
+      Navigator.of(context).pop(
+        TransactionApprovalResult(
+          approved: true,
+          txHash: progressOutcome.txHash,
+        ),
+      );
     } catch (e, stackTrace) {
       print('[tx_confirm][approve_error] error=$e');
       print('[tx_confirm][approve_error][stack]=$stackTrace');
@@ -164,6 +187,13 @@ class _TransactionConfirmationScreenState
         _showRecoveryActions = true;
       });
     }
+  }
+
+  void _scrollToPasswordSection() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _passwordFocusNode.requestFocus();
+    });
   }
 
   void _handleModifyTransactionPressed() {
@@ -401,6 +431,7 @@ class _TransactionConfirmationScreenState
           children: [
             Expanded(
               child: SingleChildScrollView(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,154 +524,182 @@ class _TransactionConfirmationScreenState
                         ],
                       ),
                     ),
-                    const Gap(16),
-                    _sectionCard(
-                      colors: colors,
-                      radius: 28,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _sectionHeading(
-                            'Wallet password',
-                            _hasPassword
-                                ? 'Password and biometric approval are required to sign.'
-                                : 'Set your app password before approving this transaction.',
-                            colors: colors,
-                          ),
-                          const Gap(14),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: colors.cardBackgroundSecondary,
-                              borderRadius: BorderRadius.circular(22),
-                              border: Border.all(
-                                color: colors.inputBorder,
-                                width: 1.2,
-                              ),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            child: TextField(
-                              controller: _passwordController,
-                              obscureText: _obscurePassword,
-                              enableSuggestions: false,
-                              autocorrect: false,
-                              style: GoogleFonts.spaceGrotesk(
-                                color: colors.textPrimary,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Enter wallet password',
-                                hintStyle: TextStyle(
-                                  color: colors.textMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                filled: false,
-                                fillColor: Colors.transparent,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                                errorBorder: InputBorder.none,
-                                focusedErrorBorder: InputBorder.none,
-                                prefixIcon: Icon(
-                                  Icons.lock_outline_rounded,
-                                  color: colors.textMuted,
-                                  size: 20,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 18,
-                                ),
-                                suffixIcon: IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                    color: colors.textMuted,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (!_hasPassword) ...[
-                            const Gap(12),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: colors.cardBackgroundSecondary,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: colors.borderColor),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    Icons.shield_outlined,
-                                    color: colors.accentStrong,
-                                    size: 20,
-                                  ),
-                                  const Gap(10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Set an app password before signing transactions.',
-                                          style: TextStyle(
-                                            color: colors.textSecondary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const Gap(10),
-                                        OutlinedButton(
-                                          onPressed: _isSubmitting
-                                              ? null
-                                              : _handleSetPasswordPressed,
-                                          style: OutlinedButton.styleFrom(
-                                            side: BorderSide(
-                                              color: colors.accentStrong,
-                                            ),
-                                            foregroundColor:
-                                                colors.accentStrong,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 12,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(18),
-                                            ),
-                                          ),
-                                          child: const Text('Set Password'),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const Gap(12),
-                    if (_errorText != null) _buildErrorAlert(colors: colors),
+                    const Gap(20),
                   ],
                 ),
               ),
             ),
-            _buildBottomActions(colors: colors),
+            _buildStickyActionArea(colors: colors),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStickyActionArea({required ReefThemeColors colors}) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+        decoration: BoxDecoration(
+          color: colors.appBackground,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 22,
+              offset: const Offset(0, -8),
+              spreadRadius: -18,
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildPasswordPanel(colors: colors),
+              if (_errorText != null) ...[
+                const Gap(12),
+                _buildErrorAlert(colors: colors),
+              ],
+              const Gap(12),
+              _buildBottomActions(colors: colors),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordPanel({required ReefThemeColors colors}) {
+    return _sectionCard(
+      colors: colors,
+      radius: 28,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeading(
+            'Wallet password',
+            _hasPassword
+                ? 'Password and biometric approval are required to sign.'
+                : 'Set your app password before approving this transaction.',
+            colors: colors,
+          ),
+          const Gap(14),
+          Container(
+            decoration: BoxDecoration(
+              color: colors.cardBackgroundSecondary,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: colors.inputBorder, width: 1.2),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextField(
+              controller: _passwordController,
+              focusNode: _passwordFocusNode,
+              obscureText: _obscurePassword,
+              enableSuggestions: false,
+              autocorrect: false,
+              style: GoogleFonts.spaceGrotesk(
+                color: colors.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Enter wallet password',
+                hintStyle: TextStyle(
+                  color: colors.textMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+                filled: false,
+                fillColor: Colors.transparent,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                prefixIcon: Icon(
+                  Icons.lock_outline_rounded,
+                  color: colors.textMuted,
+                  size: 20,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 18),
+                suffixIcon: IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: colors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (!_hasPassword) ...[
+            const Gap(12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colors.cardBackgroundSecondary,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: colors.borderColor),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.shield_outlined,
+                    color: colors.accentStrong,
+                    size: 20,
+                  ),
+                  const Gap(10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Set an app password before signing transactions.',
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Gap(10),
+                        OutlinedButton(
+                          onPressed: _isSubmitting
+                              ? null
+                              : _handleSetPasswordPressed,
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.accentStrong),
+                            foregroundColor: colors.accentStrong,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: const Text('Set Password'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -919,99 +978,90 @@ class _TransactionConfirmationScreenState
   }
 
   Widget _buildBottomActions({required ReefThemeColors colors}) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-      decoration: BoxDecoration(
-        color: colors.appBackground,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 22,
-            offset: const Offset(0, -8),
-            spreadRadius: -18,
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: _isSubmitting
+                ? null
+                : () => Navigator.of(
+                    context,
+                  ).pop(const TransactionApprovalResult(approved: false)),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: colors.inputBorder, width: 1.6),
+              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? colors.cardBackground.withOpacity(0.25)
+                  : Colors.white.withOpacity(0.9),
+              foregroundColor: colors.textPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+            ),
+            child: Text(
+              widget.rejectButtonText,
+              style: GoogleFonts.spaceGrotesk(
+                color: colors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: _isSubmitting
-                  ? null
-                  : () => Navigator.of(
-                      context,
-                    ).pop(const TransactionApprovalResult(approved: false)),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: colors.inputBorder, width: 1.6),
-                backgroundColor: Theme.of(context).brightness == Brightness.dark
-                    ? colors.cardBackground.withOpacity(0.25)
-                    : Colors.white.withOpacity(0.9),
-                foregroundColor: colors.textPrimary,
+        ),
+        const Gap(12),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: <Color>[colors.accent, colors.accentStrong],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.accentStrong.withOpacity(0.28),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -10,
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed: _isSubmitting ? null : _approveTransaction,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                disabledBackgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 15),
               ),
-              child: Text(
-                widget.rejectButtonText,
-                style: GoogleFonts.spaceGrotesk(
-                  color: colors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          const Gap(12),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: <Color>[colors.accent, colors.accentStrong],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.accentStrong.withOpacity(0.28),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                    spreadRadius: -10,
-                  ),
-                ],
-              ),
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _approveTransaction,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  disabledBackgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
                         widget.approveButtonText,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.spaceGrotesk(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-              ),
+                    ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

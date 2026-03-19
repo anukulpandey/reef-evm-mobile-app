@@ -99,6 +99,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _slippagePercent = ref.read(settingsProvider).defaultSlippagePercent;
     _amountController.addListener(_onAmountChanged);
     _amountFocusNode.addListener(_onAmountFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {

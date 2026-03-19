@@ -70,6 +70,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   context,
                   walletState.activeAccount?.address,
                   walletState.displayAccountName,
+                  onAccountTap: () =>
+                      ref.read(navigationTabProvider.notifier).setIndex(1),
                 ),
               ),
             ),

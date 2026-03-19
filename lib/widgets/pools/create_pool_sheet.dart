@@ -44,7 +44,10 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
   bool _isResolvingPair = false;
   bool? _poolExists;
   String? _resolvedPairAddress;
+  BigInt? _reserveA;
+  BigInt? _reserveB;
   String? _errorText;
+  bool _isAutoSyncingAmounts = false;
 
   @override
   void initState() {
@@ -69,6 +72,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
         orElse: () => _tokenOptions.first,
       );
     }
+    _amountAController.addListener(() => _handleAmountChanged(_AmountField.a));
+    _amountBController.addListener(() => _handleAmountChanged(_AmountField.b));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshPoolState();
     });
@@ -139,6 +144,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
                     _tokenA = next;
                     _poolExists = null;
                     _resolvedPairAddress = null;
+                    _reserveA = null;
+                    _reserveB = null;
                     if (_isSameToken(_tokenA!, _tokenB)) {
                       _tokenB = _tokenOptions.firstWhere(
                         (token) => !_isSameToken(token, _tokenA),
@@ -161,6 +168,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
                     _tokenB = next;
                     _poolExists = null;
                     _resolvedPairAddress = null;
+                    _reserveA = null;
+                    _reserveB = null;
                     if (_isSameToken(_tokenA!, _tokenB)) {
                       _tokenA = _tokenOptions.firstWhere(
                         (token) => !_isSameToken(token, _tokenB),
@@ -211,7 +220,7 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
               if (_resolvedPairAddress != null && _poolExists == true) ...[
                 const Gap(8),
                 Text(
-                  'Existing pair: ${_shortAddress(_resolvedPairAddress!)}',
+                  _existingPairSummaryText,
                   style: TextStyle(
                     color: colors.textMuted,
                     fontWeight: FontWeight.w600,
@@ -478,6 +487,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       setState(() {
         _poolExists = null;
         _resolvedPairAddress = null;
+        _reserveA = null;
+        _reserveB = null;
       });
       return;
     }
@@ -496,13 +507,18 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       setState(() {
         _poolExists = resolution.exists;
         _resolvedPairAddress = resolution.pairAddress;
+        _reserveA = resolution.reserveA;
+        _reserveB = resolution.reserveB;
       });
+      _syncAmountsFromExistingPool();
     } catch (error) {
       debugPrint('[create_pool][pair_check_error] $error');
       if (!mounted) return;
       setState(() {
         _poolExists = null;
         _resolvedPairAddress = null;
+        _reserveA = null;
+        _reserveB = null;
         _errorText = 'Unable to check whether this pool already exists.';
       });
     } finally {
@@ -548,6 +564,8 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     setState(() {
       _poolExists = poolState.exists;
       _resolvedPairAddress = poolState.pairAddress;
+      _reserveA = poolState.reserveA;
+      _reserveB = poolState.reserveB;
     });
 
     final amountAText = _amountAController.text.trim();
@@ -569,6 +587,17 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     }
     if (rawA <= BigInt.zero || rawB <= BigInt.zero) {
       setState(() => _errorText = 'Amounts must be greater than zero.');
+      return;
+    }
+
+    final balanceValidation = _validateAvailableBalances(
+      tokenA: tokenA,
+      tokenB: tokenB,
+      rawA: rawA,
+      rawB: rawB,
+    );
+    if (balanceValidation != null) {
+      setState(() => _errorText = balanceValidation);
       return;
     }
 
@@ -949,9 +978,186 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     );
     final normalized = pairAddress.trim().toLowerCase();
     if (normalized.isEmpty || normalized == _zeroAddress) {
-      return const _PoolResolution(exists: false, pairAddress: null);
+      return const _PoolResolution(
+        exists: false,
+        pairAddress: null,
+        reserveA: null,
+        reserveB: null,
+      );
     }
-    return _PoolResolution(exists: true, pairAddress: pairAddress);
+
+    final reserves = await web3.getPairReservesRaw(pairAddress: pairAddress);
+    final token0IsTokenA =
+        _compareNormalizedAddresses(
+          resolvedTokenA.trim().toLowerCase(),
+          resolvedTokenB.trim().toLowerCase(),
+        ) <=
+        0;
+
+    return _PoolResolution(
+      exists: true,
+      pairAddress: pairAddress,
+      reserveA: token0IsTokenA ? reserves.$1 : reserves.$2,
+      reserveB: token0IsTokenA ? reserves.$2 : reserves.$1,
+    );
+  }
+
+  void _handleAmountChanged(_AmountField field) {
+    if (_isAutoSyncingAmounts) return;
+    if (_poolExists != true) return;
+
+    if (field == _AmountField.a) {
+      _syncCounterAmount(
+        sourceController: _amountAController,
+        targetController: _amountBController,
+        sourceToken: _tokenA,
+        targetToken: _tokenB,
+        sourceReserve: _reserveA,
+        targetReserve: _reserveB,
+      );
+      return;
+    }
+
+    _syncCounterAmount(
+      sourceController: _amountBController,
+      targetController: _amountAController,
+      sourceToken: _tokenB,
+      targetToken: _tokenA,
+      sourceReserve: _reserveB,
+      targetReserve: _reserveA,
+    );
+  }
+
+  void _syncAmountsFromExistingPool() {
+    if (_poolExists != true) return;
+    if (_amountAController.text.trim().isNotEmpty) {
+      _syncCounterAmount(
+        sourceController: _amountAController,
+        targetController: _amountBController,
+        sourceToken: _tokenA,
+        targetToken: _tokenB,
+        sourceReserve: _reserveA,
+        targetReserve: _reserveB,
+      );
+      return;
+    }
+    if (_amountBController.text.trim().isNotEmpty) {
+      _syncCounterAmount(
+        sourceController: _amountBController,
+        targetController: _amountAController,
+        sourceToken: _tokenB,
+        targetToken: _tokenA,
+        sourceReserve: _reserveB,
+        targetReserve: _reserveA,
+      );
+    }
+  }
+
+  void _syncCounterAmount({
+    required TextEditingController sourceController,
+    required TextEditingController targetController,
+    required Token? sourceToken,
+    required Token? targetToken,
+    required BigInt? sourceReserve,
+    required BigInt? targetReserve,
+  }) {
+    if (sourceToken == null || targetToken == null) return;
+    if (sourceReserve == null ||
+        targetReserve == null ||
+        sourceReserve <= BigInt.zero ||
+        targetReserve <= BigInt.zero) {
+      return;
+    }
+
+    final sourceText = sourceController.text.trim();
+    if (sourceText.isEmpty) {
+      if (targetController.text.isEmpty) return;
+      _setControllerText(targetController, '');
+      return;
+    }
+
+    try {
+      final web3 = ref.read(web3ServiceProvider);
+      final sourceRaw = web3.parseAmountToRaw(sourceText, sourceToken.decimals);
+      if (sourceRaw <= BigInt.zero) {
+        _setControllerText(targetController, '');
+        return;
+      }
+
+      final targetRaw = (sourceRaw * targetReserve) ~/ sourceReserve;
+      final formatted = AmountUtils.trimTrailingZeros(
+        web3.formatAmountFromRaw(targetRaw, targetToken.decimals),
+      );
+      _setControllerText(targetController, formatted);
+    } catch (_) {
+      // Ignore partial/invalid numeric input while user is typing.
+    }
+  }
+
+  void _setControllerText(TextEditingController controller, String text) {
+    if (controller.text == text) return;
+    _isAutoSyncingAmounts = true;
+    controller.value = controller.value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+      composing: TextRange.empty,
+    );
+    _isAutoSyncingAmounts = false;
+  }
+
+  String get _existingPairSummaryText {
+    final address = _resolvedPairAddress;
+    if (address == null) return '';
+    final reserveA = _reserveA;
+    final reserveB = _reserveB;
+    if (reserveA == null ||
+        reserveB == null ||
+        reserveA <= BigInt.zero ||
+        reserveB <= BigInt.zero ||
+        _tokenA == null ||
+        _tokenB == null) {
+      return 'Existing pair: ${_shortAddress(address)}';
+    }
+
+    final web3 = ref.read(web3ServiceProvider);
+    final formattedReserveA = AmountUtils.formatCompactToken(
+      web3.formatAmountFromRaw(reserveA, _tokenA!.decimals),
+    );
+    final formattedReserveB = AmountUtils.formatCompactToken(
+      web3.formatAmountFromRaw(reserveB, _tokenB!.decimals),
+    );
+
+    return 'Existing pair: ${_shortAddress(address)}  •  Ratio $formattedReserveA:${formattedReserveB}';
+  }
+
+  String? _validateAvailableBalances({
+    required Token tokenA,
+    required Token tokenB,
+    required BigInt rawA,
+    required BigInt rawB,
+  }) {
+    final tokenABalanceRaw = _tokenBalanceToRaw(tokenA);
+    final tokenBBalanceRaw = _tokenBalanceToRaw(tokenB);
+
+    if (tokenABalanceRaw != null && rawA > tokenABalanceRaw) {
+      return 'Amount A exceeds your available ${tokenA.symbol.toUpperCase()} balance.';
+    }
+    if (tokenBBalanceRaw != null && rawB > tokenBBalanceRaw) {
+      return 'Amount B exceeds your available ${tokenB.symbol.toUpperCase()} balance.';
+    }
+    return null;
+  }
+
+  BigInt? _tokenBalanceToRaw(Token token) {
+    final balance = token.balance.trim();
+    if (balance.isEmpty) return null;
+    try {
+      return ref
+          .read(web3ServiceProvider)
+          .parseAmountToRaw(balance, token.decimals);
+    } catch (_) {
+      return null;
+    }
   }
 
   static String _factoryPairTokenAddress(Token token) {
@@ -967,11 +1173,24 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
         normalized.contains('canceled by user') ||
         normalized.contains('user rejected');
   }
+
+  static int _compareNormalizedAddresses(String left, String right) {
+    return left.compareTo(right);
+  }
 }
 
 class _PoolResolution {
-  const _PoolResolution({required this.exists, this.pairAddress});
+  const _PoolResolution({
+    required this.exists,
+    this.pairAddress,
+    this.reserveA,
+    this.reserveB,
+  });
 
   final bool exists;
   final String? pairAddress;
+  final BigInt? reserveA;
+  final BigInt? reserveB;
 }
+
+enum _AmountField { a, b }

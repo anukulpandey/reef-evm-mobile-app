@@ -5,9 +5,11 @@ import 'package:gap/gap.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/fiat_currency.dart';
+import '../providers/navigation_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../widgets/settings/fiat_currency_selection_sheet.dart';
+import '../widgets/settings/slippage_selection_sheet.dart';
 import '../widgets/common/square_checkbox.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/change_password_modal.dart';
@@ -48,6 +50,8 @@ class SettingsScreen extends ConsumerWidget {
                 context,
                 walletState.activeAccount?.address,
                 walletState.displayAccountName,
+                onAccountTap: () =>
+                    ref.read(navigationTabProvider.notifier).setIndex(1),
               ),
             ),
           ),
@@ -172,6 +176,33 @@ class SettingsScreen extends ConsumerWidget {
                     context: context,
                     ref: ref,
                   ),
+                ),
+                _settingsRow(
+                  icon: Icons.swap_horiz_rounded,
+                  title: 'Default Swap Slippage',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${settings.defaultSlippagePercent.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          color: colors.accentStrong,
+                          fontWeight: FontWeight.w800,
+                          fontSize: Styles.fsBody,
+                        ),
+                      ),
+                      const Gap(4),
+                      Icon(
+                        Icons.keyboard_arrow_right_rounded,
+                        color: colors.textMuted,
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                  onTap: () =>
+                      showSlippageSelectionSheet(context: context, ref: ref),
                 ),
                 _settingsRow(
                   icon: Icons.refresh_rounded,

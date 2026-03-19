@@ -8,8 +8,9 @@ import '../l10n/app_localizations.dart';
 Widget topBar(
   BuildContext context,
   String? selectedAddress,
-  String? accountName,
-) {
+  String? accountName, {
+  VoidCallback? onAccountTap,
+}) {
   final l10n = AppLocalizations.of(context);
   return Container(
     color: Colors.transparent,
@@ -32,7 +33,10 @@ Widget topBar(
             if (selectedAddress != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4, left: 8),
-                child: _AccountPill(accountName ?? l10n.noName),
+                child: _AccountPill(
+                  accountName ?? l10n.noName,
+                  onPressed: onAccountTap,
+                ),
               ),
           ],
         ),
@@ -44,7 +48,8 @@ Widget topBar(
 
 class _AccountPill extends StatelessWidget {
   final String title;
-  const _AccountPill(this.title);
+  final VoidCallback? onPressed;
+  const _AccountPill(this.title, {this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +73,7 @@ class _AccountPill extends StatelessWidget {
         ),
         backgroundColor: colors.topBarChipBackground,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        onPressed: () {},
+        onPressed: onPressed,
       ),
     );
   }

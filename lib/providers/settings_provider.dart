@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'service_providers.dart';
 import '../constants/storage_keys.dart';
 import 'package:flutter/material.dart';
+import '../core/config/dex_config.dart';
 import '../models/fiat_currency.dart';
 
 class SettingsState {
@@ -13,6 +14,7 @@ class SettingsState {
   final bool? developerExpanded;
   final ThemeMode themeMode;
   final FiatCurrency fiatCurrency;
+  final double defaultSlippagePercent;
 
   SettingsState({
     required this.rpcUrl,
@@ -22,6 +24,7 @@ class SettingsState {
     this.developerExpanded,
     required this.themeMode,
     required this.fiatCurrency,
+    required this.defaultSlippagePercent,
   });
 
   SettingsState copyWith({
@@ -32,6 +35,7 @@ class SettingsState {
     bool? developerExpanded,
     ThemeMode? themeMode,
     FiatCurrency? fiatCurrency,
+    double? defaultSlippagePercent,
   }) {
     return SettingsState(
       rpcUrl: rpcUrl ?? this.rpcUrl,
@@ -41,6 +45,8 @@ class SettingsState {
       developerExpanded: developerExpanded ?? this.developerExpanded,
       themeMode: themeMode ?? this.themeMode,
       fiatCurrency: fiatCurrency ?? this.fiatCurrency,
+      defaultSlippagePercent:
+          defaultSlippagePercent ?? this.defaultSlippagePercent,
     );
   }
 
@@ -66,6 +72,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       developerExpanded: false,
       themeMode: ThemeMode.dark,
       fiatCurrency: FiatCurrency.usd,
+      defaultSlippagePercent: DexConfig.defaultSlippagePercent,
     );
   }
 
@@ -77,6 +84,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final developerMode = prefs.getBool(StorageKeys.developerMode) ?? false;
     final themeModeRaw = prefs.getString(StorageKeys.themeMode);
     final fiatCurrencyRaw = prefs.getString(StorageKeys.fiatCurrency);
+    final slippageRaw = prefs.getDouble(StorageKeys.defaultSlippagePercent);
 
     state = state.copyWith(
       rpcUrl: rpc,
@@ -86,6 +94,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       developerExpanded: state.developerExpanded,
       themeMode: _parseThemeMode(themeModeRaw),
       fiatCurrency: FiatCurrencyX.fromCode(fiatCurrencyRaw),
+      defaultSlippagePercent: _sanitizeSlippage(slippageRaw),
     );
 
     // Update Web3 Service
@@ -134,6 +143,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
     state = state.copyWith(fiatCurrency: currency);
   }
 
+  Future<void> setDefaultSlippagePercent(double percent) async {
+    final normalized = _sanitizeSlippage(percent);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(StorageKeys.defaultSlippagePercent, normalized);
+    state = state.copyWith(defaultSlippagePercent: normalized);
+  }
+
   void setDeveloperExpanded(bool expanded) {
     state = state.copyWith(developerExpanded: expanded);
   }
@@ -151,6 +167,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   static String _themeModeToStorage(ThemeMode mode) {
     return mode == ThemeMode.light ? 'light' : 'dark';
+  }
+
+  static double _sanitizeSlippage(double? raw) {
+    if (raw == null || !raw.isFinite) {
+      return DexConfig.defaultSlippagePercent;
+    }
+    return raw.clamp(0.1, 20.0);
   }
 }
 

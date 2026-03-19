@@ -14,6 +14,7 @@ import '../widgets/official_account_box.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/common/reef_loading_widgets.dart';
 import '../widgets/wallet/account_action_dialogs.dart';
+import '../widgets/wallet/buy_reef_options_sheet.dart';
 import '../core/theme/styles.dart';
 
 enum _AvailableAccountsSortMode {
@@ -57,6 +58,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 context,
                 walletState.activeAccount?.address,
                 walletState.displayAccountName,
+                onAccountTap: () =>
+                    ref.read(navigationTabProvider.notifier).setIndex(1),
               ),
             ),
           ),
@@ -197,7 +200,23 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: ElevatedButton(
-            onPressed: () {},
+            onPressed: () {
+              final address = state.activeAccount?.address.trim();
+              if (address == null || address.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Select an account before buying REEF.'),
+                  ),
+                );
+                return;
+              }
+
+              showBuyReefOptionsSheet(
+                context: context,
+                walletAddress: address,
+                displayName: state.displayAccountName,
+              );
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shadowColor: Colors.transparent,

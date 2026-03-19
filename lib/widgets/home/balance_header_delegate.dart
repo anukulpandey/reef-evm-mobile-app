@@ -18,6 +18,12 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.onToggleVisibility,
   });
 
+  static const LinearGradient _balanceValueGradient = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [Color(0xFFA93185), Color(0xFF5D3BAD)],
+  );
+
   @override
   Widget build(
     BuildContext context,
@@ -78,7 +84,7 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                     showContent: showBalance,
                     child: GradientText(
                       portfolioFiatValue,
-                      gradient: textGradient(),
+                      gradient: _balanceValueGradient,
                       style: GoogleFonts.poppins(
                         fontSize: 54,
                         fontWeight: FontWeight.w800,

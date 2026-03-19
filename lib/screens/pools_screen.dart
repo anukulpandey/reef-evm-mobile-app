@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/token.dart';
+import '../providers/navigation_provider.dart';
 import '../providers/pool_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../core/theme/styles.dart';
@@ -46,6 +47,8 @@ class PoolsScreen extends ConsumerWidget {
                 context,
                 walletState.activeAccount?.address,
                 walletState.displayAccountName,
+                onAccountTap: () =>
+                    ref.read(navigationTabProvider.notifier).setIndex(1),
               ),
             ),
           ),
