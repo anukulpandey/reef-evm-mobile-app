@@ -18,7 +18,20 @@ class ContractCodeRejectedException implements Exception {
   String toString() => message;
 }
 
+class Eip1559FeeSettings {
+  const Eip1559FeeSettings({
+    required this.maxPriorityFeePerGasWei,
+    required this.maxFeePerGasWei,
+  });
+
+  final BigInt maxPriorityFeePerGasWei;
+  final BigInt maxFeePerGasWei;
+}
+
 class Web3Service {
+  static final BigInt _minimumGasPriceWei = BigInt.from(1000);
+  static final BigInt _minimumPriorityFeeWei = BigInt.from(200);
+
   late Web3Client _client;
   final Client _httpClient = Client();
   late String _rpcUrl;
@@ -837,10 +850,11 @@ class Web3Service {
     int? configuredGasLimit,
   }) async {
     final from = _parseAddressOrThrow(fromAddress, field: 'sender');
-    final gasPriceWei = await getGasPriceWei();
+    final fees = await getContractDeploymentFeeSettings();
     final transaction = Transaction(
       from: from,
-      gasPrice: EtherAmount.inWei(gasPriceWei),
+      maxFeePerGas: EtherAmount.inWei(fees.maxFeePerGasWei),
+      maxPriorityFeePerGas: EtherAmount.inWei(fees.maxPriorityFeePerGasWei),
       data: _buildDeploymentData(
         abiJson: abiJson,
         bytecodeHex: bytecodeHex,
@@ -848,10 +862,34 @@ class Web3Service {
       ),
       maxGas: configuredGasLimit ?? _contractDeployGasLimit,
     );
-    return _resolveGasLimit(
-      transaction,
-      from,
+    return _resolveContractDeploymentGasLimit(
+      transaction: transaction,
+      sender: from,
       contextLabel: 'contract_deploy/preview',
+    );
+  }
+
+  Future<BigInt?> probeContractDeploymentGasEstimate({
+    required String fromAddress,
+    required String abiJson,
+    required String bytecodeHex,
+    required List<dynamic> constructorArgs,
+  }) async {
+    final from = _parseAddressOrThrow(fromAddress, field: 'sender');
+    final fees = await getContractDeploymentFeeSettings();
+    return _estimateGasLimitViaRpc(
+      Transaction(
+        from: from,
+        maxFeePerGas: EtherAmount.inWei(fees.maxFeePerGasWei),
+        maxPriorityFeePerGas: EtherAmount.inWei(fees.maxPriorityFeePerGasWei),
+        data: _buildDeploymentData(
+          abiJson: abiJson,
+          bytecodeHex: bytecodeHex,
+          constructorArgs: constructorArgs,
+        ),
+        maxGas: _contractDeployGasLimit,
+      ),
+      sender: from,
     );
   }
 
@@ -863,18 +901,39 @@ class Web3Service {
     String contextLabel = 'contract_deploy',
     int? gasLimit,
   }) async {
+    final signer = EthPrivateKey.fromHex(account.privateKey).address;
+    final fees = await getContractDeploymentFeeSettings();
+    final deploymentGasLimit = await _resolveContractDeploymentGasLimit(
+      transaction: Transaction(
+        from: signer,
+        maxFeePerGas: EtherAmount.inWei(fees.maxFeePerGasWei),
+        maxPriorityFeePerGas: EtherAmount.inWei(fees.maxPriorityFeePerGasWei),
+        data: _buildDeploymentData(
+          abiJson: abiJson,
+          bytecodeHex: bytecodeHex,
+          constructorArgs: constructorArgs,
+        ),
+        maxGas: gasLimit ?? _contractDeployGasLimit,
+      ),
+      sender: signer,
+      contextLabel: '$contextLabel/prepare',
+    );
     final transaction = Transaction(
       data: _buildDeploymentData(
         abiJson: abiJson,
         bytecodeHex: bytecodeHex,
         constructorArgs: constructorArgs,
       ),
-      maxGas: gasLimit ?? _contractDeployGasLimit,
+      maxGas: deploymentGasLimit,
+      maxFeePerGas: EtherAmount.inWei(fees.maxFeePerGasWei),
+      maxPriorityFeePerGas: EtherAmount.inWei(fees.maxPriorityFeePerGasWei),
     );
     return _signAndBroadcast(
       account: account,
       transaction: transaction,
       contextLabel: contextLabel,
+      skipGasEstimation: true,
+      eip1559Fees: fees,
       debugExtras: <String, dynamic>{
         'constructorArgs': constructorArgs
             .map((item) => item.toString())
@@ -923,12 +982,12 @@ class Web3Service {
   Future<int> getChainId() => _resolveChainId();
 
   Future<BigInt> getGasPriceWei() async {
-    BigInt gasPrice = BigInt.from(1000);
+    BigInt gasPrice = _minimumGasPriceWei;
     try {
       final fetched = await _client.getGasPrice();
       gasPrice = fetched.getInWei;
     } catch (_) {
-      gasPrice = BigInt.from(1000);
+      gasPrice = _minimumGasPriceWei;
     }
 
     final baseFee = await _getLatestBaseFeeWei();
@@ -936,9 +995,32 @@ class Web3Service {
       gasPrice = baseFee;
     }
     if (gasPrice <= BigInt.zero) {
-      gasPrice = BigInt.from(1000);
+      gasPrice = _minimumGasPriceWei;
     }
     return gasPrice;
+  }
+
+  Future<BigInt> getContractDeploymentGasPriceWei() async {
+    final fees = await getContractDeploymentFeeSettings();
+    return fees.maxFeePerGasWei;
+  }
+
+  Future<Eip1559FeeSettings> getContractDeploymentFeeSettings() async {
+    final baseFeeWei = await _getLatestBaseFeeWei();
+    var maxPriorityFeePerGasWei = await _getMaxPriorityFeePerGasWei();
+    if (maxPriorityFeePerGasWei < _minimumPriorityFeeWei) {
+      maxPriorityFeePerGasWei = _minimumPriorityFeeWei;
+    }
+    var maxFeePerGasWei = baseFeeWei > BigInt.zero
+        ? (baseFeeWei * BigInt.from(2)) + maxPriorityFeePerGasWei
+        : (await getGasPriceWei());
+    if (maxFeePerGasWei < maxPriorityFeePerGasWei) {
+      maxFeePerGasWei = maxPriorityFeePerGasWei;
+    }
+    return Eip1559FeeSettings(
+      maxPriorityFeePerGasWei: maxPriorityFeePerGasWei,
+      maxFeePerGasWei: maxFeePerGasWei,
+    );
   }
 
   Future<void> waitForReceipt(
@@ -973,6 +1055,9 @@ class Web3Service {
     required Account account,
     required Transaction transaction,
     required String contextLabel,
+    BigInt? minimumGasPriceWei,
+    bool skipGasEstimation = false,
+    Eip1559FeeSettings? eip1559Fees,
     Map<String, dynamic> debugExtras = const <String, dynamic>{},
   }) async {
     final credentials = EthPrivateKey.fromHex(account.privateKey);
@@ -986,20 +1071,39 @@ class Web3Service {
     }
 
     final chainId = await _resolveChainId();
-    final gasPriceWei = await getGasPriceWei();
     final nonce = await _recommendedNonce(signerAddress);
-    final txWithSignerFields = transaction.copyWith(
-      from: signerAddress,
-      nonce: nonce,
-      gasPrice: EtherAmount.inWei(gasPriceWei),
-      value: transaction.value ?? EtherAmount.zero(),
-      data: transaction.data ?? Uint8List(0),
-    );
-    final resolvedGasLimit = await _resolveGasLimit(
-      txWithSignerFields,
-      signerAddress,
-      contextLabel: contextLabel,
-    );
+    var gasPriceWei = BigInt.zero;
+    if (eip1559Fees == null) {
+      gasPriceWei = await getGasPriceWei();
+      if (minimumGasPriceWei != null && gasPriceWei < minimumGasPriceWei) {
+        gasPriceWei = minimumGasPriceWei;
+      }
+    }
+    final txWithSignerFields = eip1559Fees != null
+        ? transaction.copyWith(
+            from: signerAddress,
+            nonce: nonce,
+            value: transaction.value ?? EtherAmount.zero(),
+            data: transaction.data ?? Uint8List(0),
+            maxFeePerGas: EtherAmount.inWei(eip1559Fees.maxFeePerGasWei),
+            maxPriorityFeePerGas: EtherAmount.inWei(
+              eip1559Fees.maxPriorityFeePerGasWei,
+            ),
+          )
+        : transaction.copyWith(
+            from: signerAddress,
+            nonce: nonce,
+            gasPrice: EtherAmount.inWei(gasPriceWei),
+            value: transaction.value ?? EtherAmount.zero(),
+            data: transaction.data ?? Uint8List(0),
+          );
+    final resolvedGasLimit = skipGasEstimation
+        ? (txWithSignerFields.maxGas ?? _nativeTransferGasLimit)
+        : await _resolveGasLimit(
+            txWithSignerFields,
+            signerAddress,
+            contextLabel: contextLabel,
+          );
     final preparedTx = txWithSignerFields.copyWith(maxGas: resolvedGasLimit);
 
     _validateTransactionPayload(
@@ -1032,22 +1136,74 @@ class Web3Service {
       }
       if (_isRetryableInvalidTransaction(rpcError)) {
         final nextNonce = await _recommendedNonce(signerAddress);
-        final currentGasPrice = preparedTx.gasPrice?.getInWei ?? BigInt.zero;
-        final networkGasPrice = await getGasPriceWei();
-        final bumpedGasPrice = _bumpGasPrice(
-          currentGasPrice > networkGasPrice ? currentGasPrice : networkGasPrice,
-        );
-        final retriedGasLimit = await _resolveGasLimit(
-          preparedTx.copyWith(
-            nonce: nextNonce,
-            gasPrice: EtherAmount.inWei(bumpedGasPrice),
-          ),
-          signerAddress,
-          contextLabel: '$contextLabel/retry',
-        );
+        final retryFees = eip1559Fees == null
+            ? null
+            : await getContractDeploymentFeeSettings();
+        BigInt bumpedGasPrice = BigInt.zero;
+        BigInt bumpedMaxFeePerGas = BigInt.zero;
+        BigInt bumpedMaxPriorityFeePerGas = BigInt.zero;
+        if (retryFees == null) {
+          final currentGasPrice = preparedTx.gasPrice?.getInWei ?? BigInt.zero;
+          final networkGasPrice = await getGasPriceWei();
+          bumpedGasPrice = _bumpGasPrice(
+            currentGasPrice > networkGasPrice
+                ? currentGasPrice
+                : networkGasPrice,
+          );
+          if (minimumGasPriceWei != null &&
+              bumpedGasPrice < minimumGasPriceWei) {
+            bumpedGasPrice = minimumGasPriceWei;
+          }
+        } else {
+          final currentMaxFeePerGas =
+              preparedTx.maxFeePerGas?.getInWei ?? retryFees.maxFeePerGasWei;
+          final currentMaxPriorityFeePerGas =
+              preparedTx.maxPriorityFeePerGas?.getInWei ??
+              retryFees.maxPriorityFeePerGasWei;
+          bumpedMaxPriorityFeePerGas = _bumpGasPrice(
+            currentMaxPriorityFeePerGas > retryFees.maxPriorityFeePerGasWei
+                ? currentMaxPriorityFeePerGas
+                : retryFees.maxPriorityFeePerGasWei,
+          );
+          final networkMaxFeePerGas = retryFees.maxFeePerGasWei;
+          bumpedMaxFeePerGas = _bumpGasPrice(
+            currentMaxFeePerGas > networkMaxFeePerGas
+                ? currentMaxFeePerGas
+                : networkMaxFeePerGas,
+          );
+          if (bumpedMaxFeePerGas < bumpedMaxPriorityFeePerGas) {
+            bumpedMaxFeePerGas = bumpedMaxPriorityFeePerGas;
+          }
+        }
+        final retriedGasLimit = skipGasEstimation
+            ? (preparedTx.maxGas ?? _nativeTransferGasLimit)
+            : await _resolveGasLimit(
+                preparedTx.copyWith(
+                  nonce: nextNonce,
+                  gasPrice: retryFees == null
+                      ? EtherAmount.inWei(bumpedGasPrice)
+                      : null,
+                  maxFeePerGas: retryFees == null
+                      ? null
+                      : EtherAmount.inWei(bumpedMaxFeePerGas),
+                  maxPriorityFeePerGas: retryFees == null
+                      ? null
+                      : EtherAmount.inWei(bumpedMaxPriorityFeePerGas),
+                ),
+                signerAddress,
+                contextLabel: '$contextLabel/retry',
+              );
         final retryTx = preparedTx.copyWith(
           nonce: nextNonce,
-          gasPrice: EtherAmount.inWei(bumpedGasPrice),
+          gasPrice: retryFees == null
+              ? EtherAmount.inWei(bumpedGasPrice)
+              : null,
+          maxFeePerGas: retryFees == null
+              ? null
+              : EtherAmount.inWei(bumpedMaxFeePerGas),
+          maxPriorityFeePerGas: retryFees == null
+              ? null
+              : EtherAmount.inWei(bumpedMaxPriorityFeePerGas),
           maxGas: retriedGasLimit,
         );
         _validateTransactionPayload(
@@ -1116,6 +1272,10 @@ class Web3Service {
       'nonce': transaction.nonce,
       'gasLimit': transaction.maxGas,
       'gasPriceWei': transaction.gasPrice?.getInWei.toString(),
+      'maxFeePerGasWei': transaction.maxFeePerGas?.getInWei.toString(),
+      'maxPriorityFeePerGasWei': transaction.maxPriorityFeePerGas?.getInWei
+          .toString(),
+      'isEip1559': transaction.isEIP1559,
       'chainId': chainId,
       'dataHex': bytesToHex(
         transaction.data ?? Uint8List(0),
@@ -1126,11 +1286,14 @@ class Web3Service {
     };
     print('[tx][payload] ${jsonEncode(payload)}');
 
-    final signedTx = await _client.signTransaction(
+    final signedPayload = await _client.signTransaction(
       credentials,
       transaction,
       chainId: chainId,
     );
+    final signedTx = transaction.isEIP1559
+        ? prependTransactionType(0x02, signedPayload)
+        : signedPayload;
     final rawTxHex = bytesToHex(
       signedTx,
       include0x: true,
@@ -1183,6 +1346,29 @@ class Web3Service {
     return fallback;
   }
 
+  Future<int> _resolveContractDeploymentGasLimit({
+    required Transaction transaction,
+    required EthereumAddress sender,
+    required String contextLabel,
+  }) async {
+    final configuredLimit = transaction.maxGas ?? _contractDeployGasLimit;
+    final estimatedLimit = await _estimateGasLimitViaRpc(
+      transaction,
+      sender: sender,
+    );
+    if (estimatedLimit == null || estimatedLimit <= BigInt.zero) {
+      print(
+        '[tx][contract_deploy_gas] context=$contextLabel configured=$configuredLimit estimated=null chosen=$configuredLimit',
+      );
+      return configuredLimit;
+    }
+    final chosen = estimatedLimit.toInt();
+    print(
+      '[tx][contract_deploy_gas] context=$contextLabel configured=$configuredLimit estimated=$estimatedLimit chosen=$chosen',
+    );
+    return chosen > configuredLimit ? chosen : configuredLimit;
+  }
+
   Future<BigInt?> _estimateGasLimitViaRpc(
     Transaction transaction, {
     required EthereumAddress sender,
@@ -1201,6 +1387,13 @@ class Web3Service {
           ),
         if ((transaction.gasPrice?.getInWei ?? BigInt.zero) > BigInt.zero)
           'gasPrice': _toRpcQuantity(transaction.gasPrice!.getInWei),
+        if ((transaction.maxFeePerGas?.getInWei ?? BigInt.zero) > BigInt.zero)
+          'maxFeePerGas': _toRpcQuantity(transaction.maxFeePerGas!.getInWei),
+        if ((transaction.maxPriorityFeePerGas?.getInWei ?? BigInt.zero) >
+            BigInt.zero)
+          'maxPriorityFeePerGas': _toRpcQuantity(
+            transaction.maxPriorityFeePerGas!.getInWei,
+          ),
       };
 
       final response = await _httpClient
@@ -1282,6 +1475,7 @@ class Web3Service {
       if (rpcError.data != null) rpcError.data.toString(),
     ].join(' ').toLowerCase();
     return rpcError.errorCode == 1010 ||
+        raw.contains('temporarily banned') ||
         raw.contains('invalid transaction') ||
         raw.contains('nonce') ||
         raw.contains('underpriced') ||
@@ -1304,7 +1498,10 @@ class Web3Service {
     try {
       final balance = await _client.getBalance(signerAddress);
       final gasLimit = transaction.maxGas ?? 0;
-      final gasPriceWei = transaction.gasPrice?.getInWei ?? BigInt.zero;
+      final gasPriceWei =
+          transaction.maxFeePerGas?.getInWei ??
+          transaction.gasPrice?.getInWei ??
+          BigInt.zero;
       final transferWei = transaction.value?.getInWei ?? BigInt.zero;
       final feeWei = BigInt.from(gasLimit) * gasPriceWei;
       final totalCostWei = transferWei + feeWei;
@@ -1355,8 +1552,18 @@ class Web3Service {
     }
 
     final gasPriceWei = transaction.gasPrice?.getInWei;
-    if (gasPriceWei == null || gasPriceWei <= BigInt.zero) {
-      throw Exception('Invalid transaction parameters: gas price is invalid.');
+    final maxFeePerGasWei = transaction.maxFeePerGas?.getInWei;
+    final maxPriorityFeePerGasWei = transaction.maxPriorityFeePerGas?.getInWei;
+    final hasLegacyFees = gasPriceWei != null && gasPriceWei > BigInt.zero;
+    final hasEip1559Fees =
+        maxFeePerGasWei != null &&
+        maxFeePerGasWei > BigInt.zero &&
+        maxPriorityFeePerGasWei != null &&
+        maxPriorityFeePerGasWei > BigInt.zero;
+    if (!hasLegacyFees && !hasEip1559Fees) {
+      throw Exception(
+        'Invalid transaction parameters: gas pricing is invalid.',
+      );
     }
 
     if (chainId <= 0) {
@@ -1364,7 +1571,7 @@ class Web3Service {
     }
 
     print(
-      '[tx][validate_ok] context=$contextLabel from=${fromAddress.hex} to=${toAddress?.hex ?? 'contract_creation'} valueWei=$valueWei nonce=$nonce gasLimit=$gasLimit gasPriceWei=$gasPriceWei chainId=$chainId',
+      '[tx][validate_ok] context=$contextLabel from=${fromAddress.hex} to=${toAddress?.hex ?? 'contract_creation'} valueWei=$valueWei nonce=$nonce gasLimit=$gasLimit gasPriceWei=$gasPriceWei maxFeePerGasWei=$maxFeePerGasWei maxPriorityFeePerGasWei=$maxPriorityFeePerGasWei chainId=$chainId',
     );
   }
 
@@ -1415,6 +1622,39 @@ class Web3Service {
       return BigInt.tryParse(text) ?? BigInt.zero;
     } catch (_) {
       return BigInt.zero;
+    }
+  }
+
+  Future<BigInt> _getMaxPriorityFeePerGasWei() async {
+    try {
+      final response = await _httpClient
+          .post(
+            Uri.parse(_rpcUrl),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'eth_maxPriorityFeePerGas',
+              'params': <dynamic>[],
+              'id': 1,
+            }),
+          )
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return _minimumPriorityFeeWei;
+      }
+
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) return _minimumPriorityFeeWei;
+      final result = payload['result'];
+      if (result is! String || result.trim().isEmpty) {
+        return _minimumPriorityFeeWei;
+      }
+      final parsed = _parseRpcQuantity(result);
+      if (parsed <= BigInt.zero) return _minimumPriorityFeeWei;
+      return parsed;
+    } catch (_) {
+      return _minimumPriorityFeeWei;
     }
   }
 

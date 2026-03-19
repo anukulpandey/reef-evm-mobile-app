@@ -80,7 +80,7 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                       portfolioFiatValue,
                       gradient: textGradient(),
                       style: GoogleFonts.poppins(
-                        fontSize: 48,
+                        fontSize: 54,
                         fontWeight: FontWeight.w800,
                         color: colors.textPrimary,
                         letterSpacing: 2,

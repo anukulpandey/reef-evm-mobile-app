@@ -15,15 +15,20 @@ class TransactionConfirmationScreen extends ConsumerStatefulWidget {
   const TransactionConfirmationScreen({
     super.key,
     required this.preview,
-    required this.onApprove,
+    this.onApprove,
     this.approveButtonText = 'Approve',
     this.rejectButtonText = 'Reject',
-  });
+    this.authenticateOnly = false,
+  }) : assert(
+         authenticateOnly || onApprove != null,
+         'onApprove is required unless authenticateOnly is true.',
+       );
 
   final TransactionPreview preview;
-  final Future<String> Function() onApprove;
+  final Future<String> Function()? onApprove;
   final String approveButtonText;
   final String rejectButtonText;
+  final bool authenticateOnly;
 
   @override
   ConsumerState<TransactionConfirmationScreen> createState() =>
@@ -134,7 +139,15 @@ class _TransactionConfirmationScreenState
     });
 
     try {
-      final txHash = await widget.onApprove();
+      if (widget.authenticateOnly) {
+        if (!mounted) return;
+        Navigator.of(
+          context,
+        ).pop(const TransactionApprovalResult(approved: true));
+        return;
+      }
+
+      final txHash = await widget.onApprove!();
       if (!mounted) return;
       Navigator.of(
         context,

@@ -18,6 +18,7 @@ import '../utils/address_utils.dart';
 import '../utils/amount_utils.dart';
 import '../widgets/common/token_avatar.dart';
 import '../widgets/pools/create_pool_sheet.dart';
+import 'token_creation_progress_screen.dart';
 import 'transaction_confirmation_screen.dart';
 
 class TokenCreatorScreen extends ConsumerStatefulWidget {
@@ -1800,7 +1801,6 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
 
     final creatorService = ref.read(tokenCreatorServiceProvider);
     final web3Service = ref.read(web3ServiceProvider);
-    TokenCreationSubmission? submission;
 
     setState(() => _isCreating = true);
     try {
@@ -1818,43 +1818,31 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
                 preview: preview,
                 approveButtonText: 'Approve & Create',
                 rejectButtonText: 'Reject',
-                onApprove: () async {
-                  submission = await creatorService.submitCreation(
-                    account: account,
-                    request: request,
-                    web3Service: web3Service,
-                  );
-                  return submission!.txHash;
-                },
+                authenticateOnly: true,
               ),
             ),
           );
       if (!mounted) return;
-      if (approval == null || !approval.approved || submission == null) {
+      if (approval == null || !approval.approved) {
         setState(() => _isCreating = false);
         return;
       }
 
-      final txHash = submission!.txHash;
-      setState(() {
-        _isCreating = false;
-        _resultState = _CreatorResultState(
-          title: 'Deploying token',
-          message:
-              'Transaction submitted (${_shortHash(txHash)}). Waiting for confirmation.',
-          txHash: txHash,
-          isPending: true,
-        );
-      });
+      setState(() => _isCreating = false);
+      final progressOutcome = await Navigator.of(context)
+          .push<TokenCreationProgressOutcome>(
+            MaterialPageRoute(
+              builder: (_) => TokenCreationProgressScreen(
+                account: account,
+                request: request,
+              ),
+            ),
+          );
+      if (!mounted || progressOutcome?.result == null) {
+        return;
+      }
 
-      final result = await creatorService.completeCreation(
-        submission: submission!,
-        web3Service: web3Service,
-      );
-      await ref.read(walletProvider.notifier).refreshPortfolio();
-      ref.invalidate(poolsProvider);
-      if (!mounted) return;
-
+      final result = progressOutcome!.result!;
       final fallbackSuffix = result.usedFallback
           ? ' Mint/burn toggles are unavailable on this local node bytecode.'
           : '';

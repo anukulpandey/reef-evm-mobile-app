@@ -51,37 +51,33 @@ class TokenCreatorService {
       request.initialSupply,
       18,
     );
+    final shouldUseFallback = await _shouldUseFallbackDeployment(
+      account: account,
+      standard: standard,
+      fallback: fallback,
+      constructorArgs: <dynamic>[
+        request.normalizedName,
+        request.normalizedSymbol,
+        initialSupplyRaw,
+      ],
+      web3Service: web3Service,
+    );
+    final selectedContract = shouldUseFallback ? fallback : standard;
 
-    final gasPriceWei = await web3Service.getGasPriceWei();
+    final gasPriceWei = await web3Service.getContractDeploymentGasPriceWei();
     var gasLimit = web3Service.contractDeployGasLimit;
 
-    try {
-      gasLimit = await web3Service.estimateContractDeploymentGasLimit(
-        fromAddress: account.address,
-        abiJson: standard.abiJson,
-        bytecodeHex: standard.bytecodeHex,
-        constructorArgs: <dynamic>[
-          request.normalizedName,
-          request.normalizedSymbol,
-          initialSupplyRaw,
-        ],
-        configuredGasLimit: gasLimit,
-      );
-    } catch (error) {
-      if (_isCodeRejectedError(error)) {
-        gasLimit = await web3Service.estimateContractDeploymentGasLimit(
-          fromAddress: account.address,
-          abiJson: fallback.abiJson,
-          bytecodeHex: fallback.bytecodeHex,
-          constructorArgs: <dynamic>[
-            request.normalizedName,
-            request.normalizedSymbol,
-            initialSupplyRaw,
-          ],
-          configuredGasLimit: gasLimit,
-        );
-      }
-    }
+    gasLimit = await web3Service.estimateContractDeploymentGasLimit(
+      fromAddress: account.address,
+      abiJson: selectedContract.abiJson,
+      bytecodeHex: selectedContract.bytecodeHex,
+      constructorArgs: <dynamic>[
+        request.normalizedName,
+        request.normalizedSymbol,
+        initialSupplyRaw,
+      ],
+      configuredGasLimit: gasLimit,
+    );
 
     final feeWei = gasPriceWei * BigInt.from(gasLimit);
     final feeDisplay = AmountUtils.formatInputAmount(
@@ -122,10 +118,11 @@ class TokenCreatorService {
           label: 'Mintable',
           value: request.mintable ? 'Yes' : 'No',
         ),
-        const TransactionPreviewField(
+        TransactionPreviewField(
           label: 'Fallback',
-          value:
-              'PolkaVM-compatible simple token bytecode is used if standard bytecode is rejected.',
+          value: shouldUseFallback
+              ? 'PolkaVM-compatible simple token bytecode will be used for this deployment.'
+              : 'Standard creator bytecode will be used unless the node rejects it.',
         ),
       ],
     );
@@ -144,6 +141,29 @@ class TokenCreatorService {
       request.normalizedSymbol,
       AmountUtils.parseAmountToRaw(request.initialSupply, 18),
     ];
+    final shouldUseFallback = await _shouldUseFallbackDeployment(
+      account: account,
+      standard: standard,
+      fallback: fallback,
+      constructorArgs: constructorArgs,
+      web3Service: web3Service,
+    );
+
+    if (shouldUseFallback) {
+      final txHash = await web3Service.deployContract(
+        account: account,
+        abiJson: fallback.abiJson,
+        bytecodeHex: fallback.bytecodeHex,
+        constructorArgs: constructorArgs,
+        contextLabel: 'contract_deploy/token_fallback',
+      );
+      return TokenCreationSubmission(
+        txHash: txHash,
+        usedFallback: true,
+        request: request,
+        creatorAddress: account.address,
+      );
+    }
 
     try {
       final txHash = await web3Service.deployContract(
@@ -260,6 +280,34 @@ class TokenCreatorService {
     final normalized = error.toString().toLowerCase();
     return normalized.contains('coderejected') ||
         normalized.contains('failed to instantiate contract');
+  }
+
+  Future<bool> _shouldUseFallbackDeployment({
+    required Account account,
+    required _TokenCreatorContract standard,
+    required _TokenCreatorContract fallback,
+    required List<dynamic> constructorArgs,
+    required Web3Service web3Service,
+  }) async {
+    final standardEstimate = await web3Service
+        .probeContractDeploymentGasEstimate(
+          fromAddress: account.address,
+          abiJson: standard.abiJson,
+          bytecodeHex: standard.bytecodeHex,
+          constructorArgs: constructorArgs,
+        );
+    if (standardEstimate != null && standardEstimate > BigInt.zero) {
+      return false;
+    }
+
+    final fallbackEstimate = await web3Service
+        .probeContractDeploymentGasEstimate(
+          fromAddress: account.address,
+          abiJson: fallback.abiJson,
+          bytecodeHex: fallback.bytecodeHex,
+          constructorArgs: constructorArgs,
+        );
+    return fallbackEstimate != null && fallbackEstimate > BigInt.zero;
   }
 }
 
