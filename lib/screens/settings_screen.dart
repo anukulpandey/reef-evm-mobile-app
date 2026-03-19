@@ -15,6 +15,7 @@ import '../widgets/official_top_bar.dart';
 import '../widgets/change_password_modal.dart';
 import '../widgets/settings/language_selection_sheet.dart';
 import '../widgets/settings/rpc_edit_dialog.dart';
+import 'dapp_browser_screen.dart';
 import '../core/theme/styles.dart';
 import '../core/theme/reef_theme_colors.dart';
 
@@ -203,6 +204,17 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   onTap: () =>
                       showSlippageSelectionSheet(context: context, ref: ref),
+                ),
+                _settingsRow(
+                  icon: Icons.travel_explore_rounded,
+                  title: 'DApp Browser',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DappBrowserScreen(),
+                    ),
+                  ),
                 ),
                 _settingsRow(
                   icon: Icons.refresh_rounded,

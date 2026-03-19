@@ -15,4 +15,6 @@ class StorageKeys {
   static const String defaultSlippagePercent = 'default_slippage_percent';
   static const String developerMode = 'developer_mode';
   static const String createdTokens = 'created_tokens_v1';
+  static const String dappApprovedOrigins = 'dapp_approved_origins_v1';
+  static const String dappRecentUrls = 'dapp_recent_urls_v1';
 }

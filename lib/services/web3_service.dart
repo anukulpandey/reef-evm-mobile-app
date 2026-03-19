@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:eth_sig_util/eth_sig_util.dart';
 import 'package:web3dart/web3dart.dart';
 import 'package:web3dart/json_rpc.dart';
 import 'package:web3dart/crypto.dart' show bytesToHex, hexToBytes;
 import 'package:http/http.dart';
 import '../core/config/dex_config.dart';
 import '../models/account.dart';
+import '../models/dapp_transaction_request.dart';
 import '../utils/amount_utils.dart';
 import '../utils/transaction_error_mapper.dart';
 
@@ -209,6 +211,154 @@ class Web3Service {
         'amount': amountStr,
         'amountRaw': amountRaw.toString(),
       },
+    );
+  }
+
+  Future<dynamic> rpcRequest({
+    required String method,
+    List<dynamic> params = const <dynamic>[],
+  }) async {
+    try {
+      final response = await _httpClient
+          .post(
+            Uri.parse(_rpcUrl),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': method,
+              'params': params,
+              'id': 1,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'RPC request failed with status ${response.statusCode}',
+        );
+      }
+
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        throw Exception('RPC returned an invalid payload.');
+      }
+
+      final error = payload['error'];
+      if (error is Map<String, dynamic>) {
+        throw RPCError(
+          (error['code'] as num?)?.toInt() ?? -32000,
+          (error['message'] ?? 'RPC request failed').toString(),
+          error['data'],
+        );
+      }
+
+      return payload['result'];
+    } catch (error) {
+      if (error is RPCError) rethrow;
+      throw Exception('Unable to reach the configured RPC endpoint.');
+    }
+  }
+
+  Future<int> estimateDappTransactionGasLimit({
+    required String fromAddress,
+    required DappTransactionRequest request,
+  }) async {
+    final sender = _parseAddressOrThrow(fromAddress, field: 'sender');
+    final fees = _resolveDappFeeSettings(request);
+    final transaction = Transaction(
+      from: sender,
+      to: request.to == null
+          ? null
+          : _parseAddressOrThrow(request.to!, field: 'recipient'),
+      value: EtherAmount.inWei(request.valueWei),
+      data: _hexDataToBytes(request.dataHex),
+      maxGas: request.gasLimit ?? _contractDeployGasLimit,
+      gasPrice: fees.$1,
+      maxFeePerGas: fees.$2,
+      maxPriorityFeePerGas: fees.$3,
+      nonce: request.nonce,
+    );
+    return _resolveGasLimit(
+      transaction,
+      sender,
+      contextLabel: 'dapp_transaction/preview',
+    );
+  }
+
+  Future<String> sendDappTransaction({
+    required Account account,
+    required DappTransactionRequest request,
+  }) async {
+    final resolvedChainId = await _resolveChainId();
+    if (request.chainId != null && request.chainId != resolvedChainId) {
+      throw Exception(
+        'Requested chain does not match the active Reef network.',
+      );
+    }
+
+    final fees = _resolveDappFeeSettings(request);
+    final transaction = Transaction(
+      to: request.to == null
+          ? null
+          : _parseAddressOrThrow(request.to!, field: 'recipient'),
+      value: EtherAmount.inWei(request.valueWei),
+      data: _hexDataToBytes(request.dataHex),
+      maxGas: request.gasLimit ?? _contractDeployGasLimit,
+      gasPrice: fees.$1,
+      maxFeePerGas: fees.$2,
+      maxPriorityFeePerGas: fees.$3,
+      nonce: request.nonce,
+    );
+
+    return _signAndBroadcast(
+      account: account,
+      transaction: transaction,
+      contextLabel: 'dapp_transaction',
+      respectTransactionFeeFields: true,
+      overrideNonce: request.nonce,
+      overrideChainId: request.chainId,
+      debugExtras: request.toJson(),
+    );
+  }
+
+  Future<String> signPersonalMessage({
+    required Account account,
+    required Uint8List payload,
+  }) async {
+    final chainId = await _resolveChainId();
+    final credentials = EthPrivateKey.fromHex(account.privateKey);
+    final signature = credentials.signPersonalMessageToUint8List(
+      payload,
+      chainId: chainId,
+    );
+    return bytesToHex(signature, include0x: true, padToEvenLength: true);
+  }
+
+  Future<String> signRawMessage({
+    required Account account,
+    required Uint8List payload,
+  }) async {
+    final chainId = await _resolveChainId();
+    final credentials = EthPrivateKey.fromHex(account.privateKey);
+    final signature = credentials.signToUint8List(payload, chainId: chainId);
+    return bytesToHex(signature, include0x: true, padToEvenLength: true);
+  }
+
+  Future<String> signTypedData({
+    required Account account,
+    required String jsonData,
+    required String method,
+  }) async {
+    final normalizedMethod = method.trim().toLowerCase();
+    final version = switch (normalizedMethod) {
+      'eth_signtypeddata_v4' => TypedDataVersion.V4,
+      'eth_signtypeddata_v3' => TypedDataVersion.V3,
+      _ => TypedDataVersion.V1,
+    };
+    return EthSigUtil.signTypedData(
+      privateKey: account.privateKey,
+      jsonData: jsonData,
+      version: version,
     );
   }
 
@@ -1058,6 +1208,9 @@ class Web3Service {
     BigInt? minimumGasPriceWei,
     bool skipGasEstimation = false,
     Eip1559FeeSettings? eip1559Fees,
+    bool respectTransactionFeeFields = false,
+    int? overrideNonce,
+    int? overrideChainId,
     Map<String, dynamic> debugExtras = const <String, dynamic>{},
   }) async {
     final credentials = EthPrivateKey.fromHex(account.privateKey);
@@ -1070,24 +1223,56 @@ class Web3Service {
       );
     }
 
-    final chainId = await _resolveChainId();
-    final nonce = await _recommendedNonce(signerAddress);
+    final resolvedChainId = await _resolveChainId();
+    if (overrideChainId != null && overrideChainId != resolvedChainId) {
+      throw Exception(
+        'Requested chain does not match the active Reef network.',
+      );
+    }
+    final chainId = overrideChainId ?? resolvedChainId;
+    final nonce = overrideNonce ?? await _recommendedNonce(signerAddress);
     var gasPriceWei = BigInt.zero;
-    if (eip1559Fees == null) {
-      gasPriceWei = await getGasPriceWei();
+    final existingMaxFee = transaction.maxFeePerGas?.getInWei;
+    final existingMaxPriorityFee = transaction.maxPriorityFeePerGas?.getInWei;
+    final existingGasPrice = transaction.gasPrice?.getInWei;
+    final shouldUseTransactionEip1559 =
+        respectTransactionFeeFields &&
+        existingMaxFee != null &&
+        existingMaxPriorityFee != null &&
+        existingMaxFee > BigInt.zero &&
+        existingMaxPriorityFee > BigInt.zero;
+    final effectiveEip1559Fees =
+        eip1559Fees ??
+        (shouldUseTransactionEip1559
+            ? Eip1559FeeSettings(
+                maxPriorityFeePerGasWei: existingMaxPriorityFee,
+                maxFeePerGasWei: existingMaxFee,
+              )
+            : null);
+
+    if (effectiveEip1559Fees == null) {
+      if (respectTransactionFeeFields &&
+          existingGasPrice != null &&
+          existingGasPrice > BigInt.zero) {
+        gasPriceWei = existingGasPrice;
+      } else {
+        gasPriceWei = await getGasPriceWei();
+      }
       if (minimumGasPriceWei != null && gasPriceWei < minimumGasPriceWei) {
         gasPriceWei = minimumGasPriceWei;
       }
     }
-    final txWithSignerFields = eip1559Fees != null
+    final txWithSignerFields = effectiveEip1559Fees != null
         ? transaction.copyWith(
             from: signerAddress,
             nonce: nonce,
             value: transaction.value ?? EtherAmount.zero(),
             data: transaction.data ?? Uint8List(0),
-            maxFeePerGas: EtherAmount.inWei(eip1559Fees.maxFeePerGasWei),
+            maxFeePerGas: EtherAmount.inWei(
+              effectiveEip1559Fees.maxFeePerGasWei,
+            ),
             maxPriorityFeePerGas: EtherAmount.inWei(
-              eip1559Fees.maxPriorityFeePerGasWei,
+              effectiveEip1559Fees.maxPriorityFeePerGasWei,
             ),
           )
         : transaction.copyWith(
@@ -1672,5 +1857,27 @@ class Web3Service {
         'Invalid transaction parameters: malformed $field address.',
       );
     }
+  }
+
+  (EtherAmount?, EtherAmount?, EtherAmount?) _resolveDappFeeSettings(
+    DappTransactionRequest request,
+  ) {
+    final gasPrice = request.gasPriceWei != null
+        ? EtherAmount.inWei(request.gasPriceWei!)
+        : null;
+    final maxFeePerGas = request.maxFeePerGasWei != null
+        ? EtherAmount.inWei(request.maxFeePerGasWei!)
+        : null;
+    final maxPriorityFeePerGas = request.maxPriorityFeePerGasWei != null
+        ? EtherAmount.inWei(request.maxPriorityFeePerGasWei!)
+        : null;
+    return (gasPrice, maxFeePerGas, maxPriorityFeePerGas);
+  }
+
+  Uint8List _hexDataToBytes(String? raw) {
+    final text = (raw ?? '').trim();
+    if (text.isEmpty || text == '0x') return Uint8List(0);
+    final normalized = text.startsWith('0x') ? text : '0x$text';
+    return Uint8List.fromList(hexToBytes(normalized));
   }
 }

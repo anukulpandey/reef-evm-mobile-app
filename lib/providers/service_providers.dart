@@ -8,6 +8,7 @@ import '../services/fcm_service.dart';
 import '../services/explorer_service.dart';
 import '../services/activity_service.dart';
 import '../services/created_token_registry_service.dart';
+import '../services/dapp_browser_service.dart';
 import '../services/token_creator_service.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>((ref) {
@@ -37,6 +38,10 @@ final explorerServiceProvider = Provider<ExplorerService>((ref) {
 
 final activityServiceProvider = Provider<ActivityService>((ref) {
   return ActivityService();
+});
+
+final dappBrowserServiceProvider = Provider<DappBrowserService>((ref) {
+  return const DappBrowserService();
 });
 
 final fcmServiceProvider = Provider<FCMService>((ref) {
