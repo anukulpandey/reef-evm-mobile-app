@@ -20,6 +20,28 @@ class MainNavigationScreen extends ConsumerStatefulWidget {
 
 class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   @override
+  void initState() {
+    super.initState();
+    ref.listenManual<SettingsState>(settingsProvider, (previous, next) {
+      final wasEnabled = previous?.developerModeEnabled ?? false;
+      final isEnabled = next.developerModeEnabled;
+      if (wasEnabled == isEnabled) return;
+
+      final notifier = ref.read(navigationTabProvider.notifier);
+      final currentIndex = ref.read(navigationTabProvider);
+
+      if (!wasEnabled && isEnabled && currentIndex >= 3) {
+        notifier.setIndex(currentIndex + 1);
+        return;
+      }
+
+      if (wasEnabled && !isEnabled && currentIndex > 3) {
+        notifier.setIndex(currentIndex - 1);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsProvider);

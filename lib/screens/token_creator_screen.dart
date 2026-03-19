@@ -1039,6 +1039,10 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         final colors = context.reefColors;
+        final symbol = request.normalizedSymbol.isEmpty
+            ? 'TOKEN'
+            : request.normalizedSymbol;
+        final supply = request.initialSupply.trim();
         return SafeArea(
           top: false,
           child: Container(
@@ -1054,103 +1058,263 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
               top: 18,
               bottom: MediaQuery.of(context).viewInsets.bottom + 18,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Confirm your token',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 28,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: colors.borderColor,
+                        borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _isCreating
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const Gap(10),
-                _confirmSummaryItem(
-                  colors: colors,
-                  label: 'Token name',
-                  value: request.normalizedName,
-                ),
-                _confirmSummaryItem(
-                  colors: colors,
-                  label: 'Token symbol',
-                  value: request.normalizedSymbol,
-                ),
-                _confirmSummaryItem(
-                  colors: colors,
-                  label: 'Initial supply',
-                  value: request.initialSupply,
-                ),
-                _confirmSummaryItem(
-                  colors: colors,
-                  label: 'Burnable',
-                  value: request.burnable ? 'Yes' : 'No',
-                ),
-                _confirmSummaryItem(
-                  colors: colors,
-                  label: 'Mintable',
-                  value: request.mintable ? 'Yes' : 'No',
-                ),
-                _confirmSummaryItem(
-                  colors: colors,
-                  label: 'Token logo',
-                  value: request.normalizedIconUrl == null
-                      ? 'Generated'
-                      : 'Custom URL',
-                ),
-                const Gap(18),
-                SizedBox(
-                  width: double.infinity,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [colors.accent, colors.accentStrong],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _isCreating
-                          ? null
-                          : () async {
-                              Navigator.of(context).pop();
-                              await _startCreation();
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        disabledBackgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                  ),
+                  const Gap(18),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Confirm your token',
+                              style: GoogleFonts.spaceGrotesk(
+                                color: colors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 28,
+                              ),
+                            ),
+                            const Gap(6),
+                            Text(
+                              'Review the metadata and token properties before deployment.',
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: const Text(
-                        'Create Token',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
+                      const Gap(12),
+                      IconButton(
+                        onPressed: _isCreating
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        style: IconButton.styleFrom(
+                          backgroundColor: colors.cardBackgroundSecondary,
+                        ),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Gap(18),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          colors.cardBackgroundSecondary,
+                          colors.cardBackground,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: colors.borderColor.withOpacity(0.75),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 68,
+                              height: 68,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.appBackground,
+                                border: Border.all(color: colors.borderColor),
+                              ),
+                              child: Center(
+                                child: TokenAvatar(
+                                  size: 46,
+                                  iconUrl: request.normalizedIconUrl,
+                                  fallbackSeed: symbol,
+                                  resolveFallbackIcon: true,
+                                  useDeterministicFallback: true,
+                                ),
+                              ),
+                            ),
+                            const Gap(14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    request.normalizedName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: colors.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 24,
+                                    ),
+                                  ),
+                                  const Gap(4),
+                                  Text(
+                                    symbol,
+                                    style: TextStyle(
+                                      color: colors.textMuted,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (supply.isNotEmpty)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    AmountUtils.formatCompactToken(supply),
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: colors.accentStrong,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 22,
+                                    ),
+                                  ),
+                                  const Gap(2),
+                                  Text(
+                                    'initial supply',
+                                    style: TextStyle(
+                                      color: colors.textMuted,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                        const Gap(16),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _confirmFlagChip(
+                              colors: colors,
+                              icon: request.burnable
+                                  ? Icons.local_fire_department_rounded
+                                  : Icons.block_rounded,
+                              label: request.burnable
+                                  ? 'Burnable'
+                                  : 'Not burnable',
+                              accentColor: request.burnable
+                                  ? colors.success
+                                  : colors.textMuted,
+                            ),
+                            _confirmFlagChip(
+                              colors: colors,
+                              icon: request.mintable
+                                  ? Icons.add_circle_rounded
+                                  : Icons.remove_circle_outline_rounded,
+                              label: request.mintable
+                                  ? 'Mintable'
+                                  : 'Fixed supply',
+                              accentColor: request.mintable
+                                  ? colors.success
+                                  : colors.textMuted,
+                            ),
+                            _confirmFlagChip(
+                              colors: colors,
+                              icon: request.normalizedIconUrl == null
+                                  ? Icons.auto_awesome_rounded
+                                  : Icons.image_rounded,
+                              label: request.normalizedIconUrl == null
+                                  ? 'Generated logo'
+                                  : 'Custom logo',
+                              accentColor: colors.accentStrong,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Gap(18),
+                  _confirmSummaryItem(
+                    colors: colors,
+                    label: 'Token name',
+                    value: request.normalizedName,
+                  ),
+                  _confirmSummaryItem(
+                    colors: colors,
+                    label: 'Token symbol',
+                    value: symbol,
+                  ),
+                  _confirmSummaryItem(
+                    colors: colors,
+                    label: 'Initial supply',
+                    value: request.initialSupply,
+                  ),
+                  const Gap(18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [colors.accent, colors.accentStrong],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.accentStrong.withOpacity(0.22),
+                            blurRadius: 16,
+                            offset: const Offset(0, 10),
+                            spreadRadius: -10,
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: _isCreating
+                            ? null
+                            : () async {
+                                Navigator.of(context).pop();
+                                await _startCreation();
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          disabledBackgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: const Text(
+                          'Create Token',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -1165,12 +1329,14 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       decoration: BoxDecoration(
         color: colors.cardBackgroundSecondary,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colors.borderColor.withOpacity(0.55)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Text(
@@ -1190,6 +1356,37 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
                 color: colors.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _confirmFlagChip({
+    required ReefThemeColors colors,
+    required IconData icon,
+    required String label,
+    required Color accentColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.cardBackground,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colors.borderColor.withOpacity(0.7)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: accentColor),
+          const Gap(8),
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
         ],
