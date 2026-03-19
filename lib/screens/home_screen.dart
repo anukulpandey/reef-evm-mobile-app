@@ -19,6 +19,7 @@ import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/blurable_content.dart';
 import '../widgets/common/token_avatar.dart';
+import '../widgets/home/activity_tab.dart';
 import '../widgets/home/balance_header_delegate.dart';
 import 'pool_detail_screen.dart';
 import 'send_screen.dart';
@@ -136,6 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             _buildNavItem(0, l10n.tokens),
             _buildNavItem(1, l10n.nfts),
+            _buildNavItem(2, l10n.activity),
           ],
         ),
       ),
@@ -269,7 +271,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           }, childCount: tokens.length),
         ),
       );
-    } else {
+    }
+
+    if (_currentIndex == 1) {
       return SliverToBoxAdapter(
         child: Center(
           child: Padding(
@@ -282,6 +286,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       );
     }
+
+    return ActivityTab(
+      address: state.activeAccount?.address ?? '',
+      showBalances: state.showBalance,
+    );
   }
 
   Widget _buildTokenCard(Token token, bool showBalance) {

@@ -3,17 +3,17 @@ class DexConfig {
 
   static const String wrappedReefAddress = String.fromEnvironment(
     'REEFSWAP_WREEF',
-    defaultValue: '0xc14FA2CFcaB2F88Cdd8a7E8Be7222DB74b3e970b',
+    defaultValue: '0xfDFBc0843889FD11BaF6EB0e01522D1a2116Ef4B',
   );
 
   static const String factoryAddress = String.fromEnvironment(
     'REEFSWAP_FACTORY',
-    defaultValue: '0xFCB548Cced2360b298Bf9f02F21CB086A662cBB2',
+    defaultValue: '0x8cF3B3a7BA07ff6B06cE8D4686E363054B4783a0',
   );
 
   static const String routerAddress = String.fromEnvironment(
     'REEFSWAP_ROUTER',
-    defaultValue: '0xD5B9E82936554CA8D65dE341574AA62877D1A7F1',
+    defaultValue: '0xc0b241faE336D672CE58bd572ab8A3f0fbBC831d',
   );
 
   static const int defaultChainId = int.fromEnvironment(

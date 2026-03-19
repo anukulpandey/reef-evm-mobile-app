@@ -34,6 +34,7 @@ class AppLocalizations {
   String get settings => _get('settings');
   String get tokens => _get('tokens');
   String get nfts => _get('nfts');
+  String get activity => _get('activity');
   String get myAccount => _get('myAccount');
   String get buyReef => _get('buyReef');
   String get add => _get('add');
@@ -41,6 +42,7 @@ class AppLocalizations {
   String get noAccountAvailable => _get('noAccountAvailable');
   String get noTokensFound => _get('noTokensFound');
   String get noNftsFound => _get('noNftsFound');
+  String get noTransactionsYet => _get('noTransactionsYet');
   String get balanceTitle => _get('balanceTitle');
   String get priceLabel => _get('priceLabel');
   String get send => _get('send');
@@ -159,6 +161,7 @@ _localizedValues = <String, Map<String, String>>{
     'settings': 'Settings',
     'tokens': 'Tokens',
     'nfts': 'NFTs',
+    'activity': 'Activity',
     'myAccount': 'My Account',
     'buyReef': 'Buy Reef',
     'add': 'Add',
@@ -167,6 +170,7 @@ _localizedValues = <String, Map<String, String>>{
         'No account currently available, create or import an account to view your assets.',
     'noTokensFound': 'No tokens found',
     'noNftsFound': 'No NFTs found',
+    'noTransactionsYet': 'No transactions yet',
     'balanceTitle': 'Balance',
     'priceLabel': 'Price: \$0.00',
     'send': 'SEND',
@@ -265,6 +269,7 @@ _localizedValues = <String, Map<String, String>>{
     'settings': 'सेटिंग्स',
     'tokens': 'टोकन',
     'nfts': 'NFTs',
+    'activity': 'एक्टिविटी',
     'myAccount': 'मेरा अकाउंट',
     'buyReef': 'रीफ खरीदें',
     'add': 'जोड़ें',
@@ -273,6 +278,7 @@ _localizedValues = <String, Map<String, String>>{
         'अभी कोई अकाउंट उपलब्ध नहीं है, अपनी संपत्ति देखने के लिए अकाउंट बनाएं या इंपोर्ट करें।',
     'noTokensFound': 'कोई टोकन नहीं मिला',
     'noNftsFound': 'कोई NFT नहीं मिला',
+    'noTransactionsYet': 'अभी तक कोई ट्रांजैक्शन नहीं है',
     'balanceTitle': 'बैलेंस',
     'priceLabel': 'कीमत: \$0.00',
     'send': 'भेजें',
@@ -371,6 +377,7 @@ _localizedValues = <String, Map<String, String>>{
     'settings': 'Impostazioni',
     'tokens': 'Token',
     'nfts': 'NFT',
+    'activity': 'Attività',
     'myAccount': 'Il Mio Account',
     'buyReef': 'Compra Reef',
     'add': 'Aggiungi',
@@ -379,6 +386,7 @@ _localizedValues = <String, Map<String, String>>{
         'Nessun account disponibile, crea o importa un account per vedere i tuoi asset.',
     'noTokensFound': 'Nessun token trovato',
     'noNftsFound': 'Nessun NFT trovato',
+    'noTransactionsYet': 'Nessuna transazione ancora',
     'balanceTitle': 'Saldo',
     'priceLabel': 'Prezzo: \$0.00',
     'send': 'INVIA',

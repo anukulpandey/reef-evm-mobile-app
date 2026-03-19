@@ -109,10 +109,39 @@ class AmountUtils {
   static String formatCompactToken(String raw) {
     final parsed = parseNumeric(raw);
     if (parsed == 0) return '0';
-    if (parsed >= 1000) {
-      return '${(parsed / 1000).toStringAsFixed(2)}K';
-    }
+    if (parsed >= 1000) return formatCompactNumber(parsed);
     return trimTrailingZeros(parsed.toStringAsFixed(parsed < 1 ? 6 : 4));
+  }
+
+  static String formatCompactBalance(String raw) {
+    final parsed = parseNumeric(raw, fallback: double.nan);
+    if (parsed.isNaN) return '...';
+    if (parsed <= 0) return '0';
+    return formatCompactNumber(parsed);
+  }
+
+  static String formatCompactNumber(
+    double value, {
+    int wholeDecimals = 0,
+    int fractionDecimals = 2,
+  }) {
+    if (!value.isFinite) return '0';
+
+    const suffixes = ['', 'k', 'M', 'B', 'T'];
+    var suffixIndex = 0;
+    var shortened = value.abs();
+
+    while (shortened >= 1000 && suffixIndex < suffixes.length - 1) {
+      shortened /= 1000;
+      suffixIndex++;
+    }
+
+    final isNegative = value < 0;
+    final decimals = suffixIndex == 0 ? wholeDecimals : fractionDecimals;
+    final formatted = trimTrailingZeros(shortened.toStringAsFixed(decimals));
+    final prefix = isNegative ? '-' : '';
+
+    return '$prefix$formatted${suffixes[suffixIndex]}';
   }
 
   static String formatShortUsd(double value) {

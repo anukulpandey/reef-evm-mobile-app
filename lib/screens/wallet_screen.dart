@@ -405,7 +405,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     return AccountBox(
       address: entry.account.address,
       name: displayName,
-      balance: AmountUtils.formatReefBalance(entry.balance),
+      balance: AmountUtils.formatCompactBalance(entry.balance),
       selected: isSelected,
       showBalance: state.showBalance,
       onSelected: () => _selectAccountAndMaybeGoHome(

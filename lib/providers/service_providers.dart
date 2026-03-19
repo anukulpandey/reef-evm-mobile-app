@@ -6,6 +6,7 @@ import '../services/web3_service.dart';
 import '../services/pool_service.dart';
 import '../services/fcm_service.dart';
 import '../services/explorer_service.dart';
+import '../services/activity_service.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>((ref) {
   return SecureStorageService();
@@ -30,6 +31,10 @@ final poolServiceProvider = Provider<PoolService>((ref) {
 
 final explorerServiceProvider = Provider<ExplorerService>((ref) {
   return ExplorerService();
+});
+
+final activityServiceProvider = Provider<ActivityService>((ref) {
+  return ActivityService();
 });
 
 final fcmServiceProvider = Provider<FCMService>((ref) {
