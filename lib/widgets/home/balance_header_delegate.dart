@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/theme/reef_theme_colors.dart';
-import '../../core/theme/styles.dart';
 import '../blurable_content.dart';
 import '../official_components.dart';
 
 class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final double portfolioUsd;
+  final String portfolioFiatValue;
   final bool showBalance;
   final String balanceTitle;
   final VoidCallback onToggleVisibility;
 
   HomeBalanceHeaderDelegate({
-    required this.portfolioUsd,
+    required this.portfolioFiatValue,
     required this.showBalance,
     required this.balanceTitle,
     required this.onToggleVisibility,
@@ -79,15 +77,7 @@ class HomeBalanceHeaderDelegate extends SliverPersistentHeaderDelegate {
                   BlurableContent(
                     showContent: showBalance,
                     child: GradientText(
-                      portfolioUsd >= 0.01
-                          ? NumberFormat.currency(
-                              symbol: '\$',
-                              decimalDigits: 2,
-                            ).format(portfolioUsd)
-                          : NumberFormat.currency(
-                              symbol: '\$',
-                              decimalDigits: 6,
-                            ).format(portfolioUsd),
+                      portfolioFiatValue,
                       gradient: textGradient(),
                       style: GoogleFonts.poppins(
                         fontSize: 48,

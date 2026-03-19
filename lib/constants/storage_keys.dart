@@ -11,6 +11,7 @@ class StorageKeys {
   static const String rpcUrl = 'rpc_url';
   static const String goHomeOnSwitch = 'go_home_on_switch';
   static const String themeMode = 'theme_mode';
+  static const String fiatCurrency = 'fiat_currency';
   static const String developerMode = 'developer_mode';
   static const String createdTokens = 'created_tokens_v1';
 }

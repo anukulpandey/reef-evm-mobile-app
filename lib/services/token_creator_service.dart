@@ -157,6 +157,7 @@ class TokenCreatorService {
         txHash: txHash,
         usedFallback: false,
         request: request,
+        creatorAddress: account.address,
       );
     } catch (error) {
       if (!_isCodeRejectedError(error)) rethrow;
@@ -172,6 +173,7 @@ class TokenCreatorService {
         txHash: txHash,
         usedFallback: true,
         request: request,
+        creatorAddress: account.address,
       );
     }
   }
@@ -201,7 +203,11 @@ class TokenCreatorService {
         submission.request.normalizedIconUrl,
       ),
     );
-    await _registry.saveToken(token);
+    await _registry.saveToken(
+      token,
+      creatorAddress: submission.creatorAddress,
+      createdAt: DateTime.now(),
+    );
 
     return TokenCreationResult(
       txHash: submission.txHash,

@@ -6,11 +6,13 @@ class TokenCreationSubmission {
     required this.txHash,
     required this.usedFallback,
     required this.request,
+    required this.creatorAddress,
   });
 
   final String txHash;
   final bool usedFallback;
   final TokenCreatorRequest request;
+  final String creatorAddress;
 }
 
 class TokenCreationResult {

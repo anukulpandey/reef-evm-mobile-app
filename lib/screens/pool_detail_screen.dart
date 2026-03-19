@@ -17,9 +17,11 @@ import '../models/pool_transaction.dart';
 import '../models/transaction_preview.dart';
 import '../providers/pool_provider.dart';
 import '../providers/service_providers.dart';
+import '../providers/settings_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../utils/address_utils.dart';
 import '../utils/amount_utils.dart';
+import '../utils/fiat_formatter.dart';
 import '../utils/transaction_error_mapper.dart';
 import '../widgets/common/always_visible_slider_thumb_shape.dart';
 import '../widgets/blurable_content.dart';
@@ -522,6 +524,7 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(settingsProvider);
     final pairLabel =
         '${widget.pool.token0Symbol} / ${widget.pool.token1Symbol}';
     final appBarTitle = widget.swapOnly ? 'Swap $pairLabel' : pairLabel;
@@ -851,14 +854,20 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                 Expanded(
                   child: _metricTile(
                     label: 'TVL',
-                    value: AmountUtils.formatShortUsd(pool.reserveUsd),
+                    value: FiatFormatter.formatShortValue(
+                      pool.reserveUsd,
+                      ref.read(settingsProvider).fiatCurrency,
+                    ),
                   ),
                 ),
                 const Gap(8),
                 Expanded(
                   child: _metricTile(
                     label: '24h Volume',
-                    value: AmountUtils.formatShortUsd(pool.volumeUsd),
+                    value: FiatFormatter.formatShortValue(
+                      pool.volumeUsd,
+                      ref.read(settingsProvider).fiatCurrency,
+                    ),
                   ),
                 ),
               ],
@@ -1886,7 +1895,10 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     if (_chartMetric == _ChartMetric.price) {
       return value.toStringAsFixed(value < 1 ? 6 : 4);
     }
-    return AmountUtils.formatShortUsd(value);
+    return FiatFormatter.formatShortValue(
+      value,
+      ref.read(settingsProvider).fiatCurrency,
+    );
   }
 
   String _formatChartTime(int timestamp) {

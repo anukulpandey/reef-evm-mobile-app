@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 
 import '../../core/theme/styles.dart';
 import '../../core/theme/reef_theme_colors.dart';
 import '../../models/pool.dart';
+import '../../providers/settings_provider.dart';
+import '../../utils/fiat_formatter.dart';
 import '../common/token_avatar.dart';
 
-class PoolListCard extends StatelessWidget {
+class PoolListCard extends ConsumerWidget {
   const PoolListCard({
     super.key,
     required this.pool,
@@ -21,8 +24,9 @@ class PoolListCard extends StatelessWidget {
   final String volume24hLabel;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.reefColors;
+    final fiatCurrency = ref.watch(settingsProvider).fiatCurrency;
     final token0Symbol = _displaySymbol(pool.token0Symbol);
     final token1Symbol = _displaySymbol(pool.token1Symbol);
     final ticker =
@@ -91,7 +95,7 @@ class PoolListCard extends StatelessWidget {
                       ),
                       const Gap(2),
                       Text(
-                        '$tvlLabel : ${pool.tvl}',
+                        '$tvlLabel : ${FiatFormatter.formatShortValue(pool.reserveUsd, fiatCurrency)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -107,7 +111,8 @@ class PoolListCard extends StatelessWidget {
                         text: TextSpan(
                           children: [
                             TextSpan(
-                              text: '$volume24hLabel : ${pool.volume24h} ',
+                              text:
+                                  '$volume24hLabel : ${FiatFormatter.formatShortValue(pool.volumeUsd, fiatCurrency)} ',
                               style: TextStyle(
                                 color: colors.textSecondary,
                                 fontSize: 15,

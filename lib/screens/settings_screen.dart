@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 
 import '../l10n/app_localizations.dart';
+import '../models/fiat_currency.dart';
 import '../providers/settings_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../widgets/settings/fiat_currency_selection_sheet.dart';
 import '../widgets/common/square_checkbox.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/change_password_modal.dart';
@@ -143,6 +145,35 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 _settingsRow(
+                  icon: Icons.currency_exchange_rounded,
+                  title: 'Fiat Currency',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        settings.fiatCurrency.code,
+                        style: TextStyle(
+                          color: colors.accentStrong,
+                          fontWeight: FontWeight.w800,
+                          fontSize: Styles.fsBody,
+                        ),
+                      ),
+                      const Gap(4),
+                      Icon(
+                        Icons.keyboard_arrow_right_rounded,
+                        color: colors.textMuted,
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                  onTap: () => showFiatCurrencySelectionSheet(
+                    context: context,
+                    ref: ref,
+                  ),
+                ),
+                _settingsRow(
                   icon: Icons.refresh_rounded,
                   title: 'Refresh Balances',
                   textColor: colors.textPrimary,
@@ -268,22 +299,31 @@ class SettingsScreen extends ConsumerWidget {
     AppLocalizations l10n,
   ) {
     final colors = context.reefColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(left: 46, right: 12, bottom: 12, top: 4),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [colors.cardBackground, colors.cardBackgroundSecondary],
+          colors: [
+            colors.cardBackground,
+            colors.cardBackgroundSecondary.withOpacity(isDark ? 0.96 : 1),
+          ],
         ),
-        border: Border.all(color: colors.borderColor, width: 1),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
+        border: Border.all(
+          color: colors.accentStrong.withOpacity(isDark ? 0.22 : 0.12),
+          width: 1.2,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x1A47286E),
-            blurRadius: 14,
-            offset: Offset(0, 6),
+            color: isDark
+                ? Colors.black.withOpacity(0.24)
+                : const Color(0x1447286E),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -291,93 +331,169 @@ class SettingsScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.hub_rounded, color: colors.accentStrong, size: 18),
-              const Gap(6),
-              Text(
-                l10n.rpcEndpoint,
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.w900,
-                  fontSize: Styles.fsBodyStrong,
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [colors.accent, colors.accentStrong],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.accentStrong.withOpacity(0.18),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.hub_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const Gap(12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.rpcEndpoint,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: Styles.fsBodyStrong,
+                      ),
+                    ),
+                    const Gap(2),
+                    Text(
+                      'Configure the node endpoint used for signing and reads.',
+                      style: TextStyle(
+                        color: colors.textMuted,
+                        fontWeight: FontWeight.w600,
+                        fontSize: Styles.fsBody - 1,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const Gap(10),
+          const Gap(14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: colors.inputFill.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.inputBorder),
+              color: isDark
+                  ? colors.pageBackground.withOpacity(0.32)
+                  : Colors.white.withOpacity(0.72),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: colors.accentStrong.withOpacity(isDark ? 0.3 : 0.18),
+              ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    rpcUrl,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: Styles.fsBody,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Current RPC',
+                        style: TextStyle(
+                          color: colors.textMuted,
+                          fontWeight: FontWeight.w700,
+                          fontSize: Styles.fsBody - 2,
+                        ),
+                      ),
+                      const Gap(4),
+                      Text(
+                        rpcUrl,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: Styles.fsBodyStrong,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Gap(8),
-                InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: rpcUrl));
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(l10n.copied)));
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.copy_rounded,
-                      color: colors.accentStrong,
-                      size: 18,
+                const Gap(12),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: rpcUrl));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(l10n.copied)));
+                    },
+                    child: Ink(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: colors.accentStrong.withOpacity(
+                          isDark ? 0.2 : 0.1,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: colors.accentStrong.withOpacity(
+                            isDark ? 0.34 : 0.16,
+                          ),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.copy_rounded,
+                        color: colors.accentStrong,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          const Gap(12),
-          Row(
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => showRpcEditDialog(
-                  context: context,
-                  ref: ref,
-                  currentRpc: rpcUrl,
-                  l10n: l10n,
+          const Gap(14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => showRpcEditDialog(
+                context: context,
+                ref: ref,
+                currentRpc: rpcUrl,
+                l10n: l10n,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colors.accentStrong,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colors.accentStrong,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
-                icon: const Icon(Icons.edit_rounded, size: 16),
-                label: Text(
-                  l10n.editRpc,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 14,
                 ),
               ),
-            ],
+              icon: const Icon(Icons.edit_rounded, size: 18),
+              label: Text(
+                l10n.editRpc,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+            ),
           ),
         ],
       ),

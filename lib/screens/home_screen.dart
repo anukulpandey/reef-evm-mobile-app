@@ -3,18 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:sliver_tools/sliver_tools.dart';
+import '../models/fiat_currency.dart';
 import '../models/token.dart';
 import '../models/pool.dart';
 import '../l10n/app_localizations.dart';
 import '../core/config/dex_config.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/settings_provider.dart';
 import '../providers/pool_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
 import '../utils/amount_utils.dart';
+import '../utils/fiat_formatter.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
@@ -42,7 +44,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
+    final settings = ref.watch(settingsProvider);
     final l10n = AppLocalizations.of(context);
+    final fiatCurrency = settings.fiatCurrency;
 
     return Scaffold(
       backgroundColor: _colors.pageBackground,
@@ -77,7 +81,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     slivers: [
                       SliverPersistentHeader(
                         delegate: HomeBalanceHeaderDelegate(
-                          portfolioUsd: walletState.portfolioUsd,
+                          portfolioFiatValue: FiatFormatter.formatValue(
+                            walletState.portfolioUsd,
+                            fiatCurrency,
+                          ),
                           showBalance: walletState.showBalance,
                           balanceTitle: l10n.balanceTitle,
                           onToggleVisibility: () => ref
@@ -97,7 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         )
                       else
-                        _buildMainContent(walletState),
+                        _buildMainContent(walletState, fiatCurrency),
                     ],
                   ),
                   if (walletState.isLoading)
@@ -253,7 +260,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildMainContent(WalletState state) {
+  Widget _buildMainContent(WalletState state, FiatCurrency fiatCurrency) {
     final l10n = AppLocalizations.of(context);
     if (_currentIndex == 0) {
       final tokens = state.portfolioTokens;
@@ -289,7 +296,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             final token = tokens[index];
             return Padding(
               padding: const EdgeInsets.only(bottom: 18.0),
-              child: _buildTokenCard(token, state.showBalance),
+              child: _buildTokenCard(token, state.showBalance, fiatCurrency),
             );
           }, childCount: tokens.length),
         ),
@@ -316,7 +323,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildTokenCard(Token token, bool showBalance) {
+  Widget _buildTokenCard(
+    Token token,
+    bool showBalance,
+    FiatCurrency fiatCurrency,
+  ) {
     final l10n = AppLocalizations.of(context);
     return ViewBoxContainer(
       color: _colors.cardBackground,
@@ -359,7 +370,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                           Text(
-                            _formatUsdPrice(token.usdPrice ?? 0),
+                            FiatFormatter.formatPrice(
+                              token.usdPrice ?? 0,
+                              fiatCurrency,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -382,7 +396,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerRight,
                               child: GradientText(
-                                _formatUsdValue(token.usdValue ?? 0),
+                                FiatFormatter.formatValue(
+                                  token.usdValue ?? 0,
+                                  fiatCurrency,
+                                ),
                                 gradient: textGradient(),
                                 style: GoogleFonts.poppins(
                                   color: _colors.textPrimary,
@@ -540,25 +557,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (poolContainsReef(pool)) return pool;
     }
     return directMatches.first;
-  }
-
-  static String _formatUsdPrice(double value) {
-    if (!value.isFinite || value <= 0) return 'Price: \$0.00';
-    if (value >= 1) {
-      return 'Price: ${NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(value)}';
-    }
-    return 'Price: ${NumberFormat.currency(symbol: '\$', decimalDigits: 6).format(value)}';
-  }
-
-  static String _formatUsdValue(double value) {
-    if (!value.isFinite || value <= 0) return '\$0.00';
-    if (value >= 0.01) {
-      return NumberFormat.currency(
-        symbol: '\$',
-        decimalDigits: 2,
-      ).format(value);
-    }
-    return NumberFormat.currency(symbol: '\$', decimalDigits: 6).format(value);
   }
 
   static String? _wrappedEtherBadge(Token token) {

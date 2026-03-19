@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 import '../core/theme/reef_theme_colors.dart';
+import '../models/created_token_entry.dart';
 import '../models/token_creation_result.dart';
 import '../models/token_creator_request.dart';
 import '../models/transaction_preview.dart';
@@ -12,6 +14,7 @@ import '../providers/pool_provider.dart';
 import '../providers/service_providers.dart';
 import '../providers/wallet_provider.dart';
 import '../services/explorer_service.dart';
+import '../utils/address_utils.dart';
 import '../utils/amount_utils.dart';
 import '../widgets/common/token_avatar.dart';
 import '../widgets/pools/create_pool_sheet.dart';
@@ -33,6 +36,7 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
   bool _burnable = true;
   bool _mintable = true;
   bool _isCreating = false;
+  int _selectedTabIndex = 0;
   _CreatorResultState? _resultState;
 
   @override
@@ -104,182 +108,563 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 240),
           child: _resultState == null
-              ? _buildFormView(context, colors, walletState)
+              ? _buildTabbedCreatorView(context, colors, walletState)
               : _buildResultView(context, colors, walletState),
         ),
       ),
     );
   }
 
-  Widget _buildFormView(
+  Widget _buildTabbedCreatorView(
     BuildContext context,
     ReefThemeColors colors,
     WalletState walletState,
   ) {
-    final validationText = _validationText;
-    final hasActiveAccount = walletState.activeAccount != null;
-
     return SingleChildScrollView(
-      key: const ValueKey<String>('creator_form'),
+      key: ValueKey<String>('creator_tabs_$_selectedTabIndex'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildIntro(colors),
-          const Gap(20),
-          _sectionCard(
+          _buildCreatorTabs(colors),
+          const Gap(18),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: _selectedTabIndex == 0
+                ? _buildCreateTab(colors, walletState)
+                : _buildMyTokensTab(colors, walletState),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreateTab(ReefThemeColors colors, WalletState walletState) {
+    final validationText = _validationText;
+    final hasActiveAccount = walletState.activeAccount != null;
+
+    return Column(
+      key: const ValueKey<String>('creator_form'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildIntro(colors),
+        const Gap(20),
+        _sectionCard(
+          colors: colors,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeading(
+                title: 'Token details',
+                subtitle:
+                    'Use the same creator flow from Reefswap to deploy a token on Reef.',
+                colors: colors,
+              ),
+              const Gap(18),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _buildInputField(
+                      controller: _nameController,
+                      label: 'Token name',
+                      hint: 'My Token',
+                      colors: colors,
+                    ),
+                  ),
+                  const Gap(12),
+                  Expanded(
+                    child: _buildInputField(
+                      controller: _symbolController,
+                      label: 'Token symbol',
+                      hint: 'MYTKN',
+                      colors: colors,
+                      textCapitalization: TextCapitalization.characters,
+                    ),
+                  ),
+                ],
+              ),
+              const Gap(14),
+              _buildInputField(
+                controller: _supplyController,
+                label: 'Initial supply',
+                hint: '0',
+                colors: colors,
+                keyboardType: TextInputType.number,
+                inputFormatters: <TextInputFormatter>[
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+              ),
+              const Gap(14),
+              _buildInputField(
+                controller: _iconUrlController,
+                label: 'Token logo URL',
+                hint: 'https://… (optional)',
+                colors: colors,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+              ),
+              const Gap(16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildBooleanToggle(
+                      label: 'Burnable',
+                      value: _burnable,
+                      colors: colors,
+                      onChanged: (next) {
+                        setState(() => _burnable = next);
+                      },
+                    ),
+                  ),
+                  const Gap(12),
+                  Expanded(
+                    child: _buildBooleanToggle(
+                      label: 'Mintable',
+                      value: _mintable,
+                      colors: colors,
+                      onChanged: (next) {
+                        setState(() => _mintable = next);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              if (validationText != null) ...[
+                const Gap(14),
+                _inlineNotice(
+                  colors: colors,
+                  icon: Icons.info_outline_rounded,
+                  text: validationText,
+                ),
+              ] else if (!hasActiveAccount) ...[
+                const Gap(14),
+                _inlineNotice(
+                  colors: colors,
+                  icon: Icons.wallet_outlined,
+                  text: 'Select or create an account before deploying a token.',
+                ),
+              ],
+            ],
+          ),
+        ),
+        const Gap(18),
+        _buildPreviewCard(colors),
+        const Gap(18),
+        SizedBox(
+          width: double.infinity,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [colors.accent, colors.accentStrong],
+              ),
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.accentStrong.withOpacity(0.24),
+                  blurRadius: 26,
+                  offset: const Offset(0, 12),
+                  spreadRadius: -12,
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed:
+                  (!hasActiveAccount || validationText != null || _isCreating)
+                  ? null
+                  : _openConfirmSheet,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                disabledBackgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                ),
+              ),
+              child: _isCreating
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Create Token',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCreatorTabs(ReefThemeColors colors) {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: colors.cardBackground,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colors.borderColor),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _creatorTabButton(
+              label: 'Create',
+              icon: Icons.auto_awesome_rounded,
+              selected: _selectedTabIndex == 0,
+              colors: colors,
+              onTap: () => setState(() => _selectedTabIndex = 0),
+            ),
+          ),
+          const Gap(8),
+          Expanded(
+            child: _creatorTabButton(
+              label: 'My Tokens',
+              icon: Icons.token_rounded,
+              selected: _selectedTabIndex == 1,
+              colors: colors,
+              onTap: () => setState(() => _selectedTabIndex = 1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _creatorTabButton({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required ReefThemeColors colors,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: selected
+              ? LinearGradient(colors: [colors.accent, colors.accentStrong])
+              : null,
+          color: selected ? null : colors.cardBackgroundSecondary,
+          border: Border.all(
+            color: selected
+                ? Colors.transparent
+                : colors.borderColor.withOpacity(0.8),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: selected ? Colors.white : colors.textSecondary,
+              size: 18,
+            ),
+            const Gap(8),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : colors.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMyTokensTab(ReefThemeColors colors, WalletState walletState) {
+    final activeAddress = walletState.activeAccount?.address;
+    if (activeAddress == null || activeAddress.trim().isEmpty) {
+      return _sectionCard(
+        key: const ValueKey<String>('creator_my_tokens_empty_account'),
+        colors: colors,
+        child: _emptyMyTokensState(
+          colors: colors,
+          title: 'No active account',
+          subtitle:
+              'Select an account to see the tokens created by this wallet.',
+          icon: Icons.wallet_outlined,
+        ),
+      );
+    }
+
+    final registry = ref.read(createdTokenRegistryServiceProvider);
+    return FutureBuilder<List<CreatedTokenEntry>>(
+      key: ValueKey<String>('creator_my_tokens_$activeAddress'),
+      future: registry.getEntriesCreatedBy(activeAddress),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _sectionCard(
             colors: colors,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _sectionHeading(
-                  title: 'Token details',
-                  subtitle:
-                      'Use the same creator flow from Reefswap to deploy a token on Reef.',
+                  title: 'My tokens',
+                  subtitle: 'Loading your locally created token history…',
                   colors: colors,
                 ),
                 const Gap(18),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: _buildInputField(
-                        controller: _nameController,
-                        label: 'Token name',
-                        hint: 'My Token',
-                        colors: colors,
-                      ),
-                    ),
-                    const Gap(12),
-                    Expanded(
-                      child: _buildInputField(
-                        controller: _symbolController,
-                        label: 'Token symbol',
-                        hint: 'MYTKN',
-                        colors: colors,
-                        textCapitalization: TextCapitalization.characters,
-                      ),
-                    ),
-                  ],
-                ),
-                const Gap(14),
-                _buildInputField(
-                  controller: _supplyController,
-                  label: 'Initial supply',
-                  hint: '0',
-                  colors: colors,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                  ],
-                ),
-                const Gap(14),
-                _buildInputField(
-                  controller: _iconUrlController,
-                  label: 'Token logo URL',
-                  hint: 'https://… (optional)',
-                  colors: colors,
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.done,
-                ),
-                const Gap(16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildBooleanToggle(
-                        label: 'Burnable',
-                        value: _burnable,
-                        colors: colors,
-                        onChanged: (next) {
-                          setState(() => _burnable = next);
-                        },
-                      ),
-                    ),
-                    const Gap(12),
-                    Expanded(
-                      child: _buildBooleanToggle(
-                        label: 'Mintable',
-                        value: _mintable,
-                        colors: colors,
-                        onChanged: (next) {
-                          setState(() => _mintable = next);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                if (validationText != null) ...[
-                  const Gap(14),
-                  _inlineNotice(
-                    colors: colors,
-                    icon: Icons.info_outline_rounded,
-                    text: validationText,
+                Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.6,
+                    color: colors.accentStrong,
                   ),
-                ] else if (!hasActiveAccount) ...[
-                  const Gap(14),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final entries = snapshot.data ?? const <CreatedTokenEntry>[];
+        if (entries.isEmpty) {
+          return _sectionCard(
+            colors: colors,
+            child: _emptyMyTokensState(
+              colors: colors,
+              title: 'No tokens created yet',
+              subtitle:
+                  'Deploy a token from the Create tab and it will appear here for this wallet.',
+              icon: Icons.auto_awesome_rounded,
+            ),
+          );
+        }
+
+        return Column(
+          key: const ValueKey<String>('creator_my_tokens_filled'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionCard(
+              colors: colors,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionHeading(
+                    title: 'My tokens',
+                    subtitle:
+                        '${entries.length} token${entries.length == 1 ? '' : 's'} created by ${AddressUtils.shorten(activeAddress)} on this device.',
+                    colors: colors,
+                  ),
+                  const Gap(16),
                   _inlineNotice(
                     colors: colors,
-                    icon: Icons.wallet_outlined,
+                    icon: Icons.devices_rounded,
                     text:
-                        'Select or create an account before deploying a token.',
+                        'This list comes from the local creator registry, so it shows tokens created from this wallet on this device even before explorer indexing catches up.',
                   ),
                 ],
+              ),
+            ),
+            const Gap(16),
+            ...entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: _createdTokenCard(colors: colors, entry: entry),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _emptyMyTokensState({
+    required ReefThemeColors colors,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [colors.accent, colors.accentStrong],
+            ),
+          ),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+        const Gap(16),
+        Text(
+          title,
+          style: GoogleFonts.spaceGrotesk(
+            color: colors.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 26,
+          ),
+        ),
+        const Gap(8),
+        Text(
+          subtitle,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _createdTokenCard({
+    required ReefThemeColors colors,
+    required CreatedTokenEntry entry,
+  }) {
+    final token = entry.token;
+    final createdLabel = entry.createdAt == null
+        ? 'Created locally'
+        : 'Created ${DateFormat('MMM d, y • h:mm a').format(entry.createdAt!.toLocal())}';
+
+    return _sectionCard(
+      colors: colors,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TokenAvatar(
+                size: 54,
+                iconUrl: token.iconUrl,
+                fallbackSeed: token.address,
+                resolveFallbackIcon: true,
+                useDeterministicFallback: true,
+                avatarBackgroundColor: colors.appBackground,
+              ),
+              const Gap(14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      token.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.spaceGrotesk(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 24,
+                      ),
+                    ),
+                    const Gap(4),
+                    Text(
+                      token.symbol,
+                      style: TextStyle(
+                        color: colors.accentStrong,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const Gap(6),
+                    Text(
+                      createdLabel,
+                      style: TextStyle(
+                        color: colors.textMuted,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    AmountUtils.formatCompactToken(token.balance),
+                    style: GoogleFonts.spaceGrotesk(
+                      color: colors.accentStrong,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 24,
+                    ),
+                  ),
+                  const Gap(2),
+                  Text(
+                    'initial',
+                    style: TextStyle(
+                      color: colors.textMuted,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Gap(16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.cardBackgroundSecondary,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colors.borderColor.withOpacity(0.6)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Contract address',
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Gap(6),
+                Text(
+                  token.address,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                  ),
+                ),
               ],
             ),
           ),
-          const Gap(18),
-          _buildPreviewCard(colors),
-          const Gap(18),
-          SizedBox(
-            width: double.infinity,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [colors.accent, colors.accentStrong],
+          const Gap(14),
+          Row(
+            children: [
+              Expanded(
+                child: _resultActionButton(
+                  colors: colors,
+                  text: 'Copy Address',
+                  onPressed: () =>
+                      _copyText(token.address, 'Contract address copied.'),
                 ),
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.accentStrong.withOpacity(0.24),
-                    blurRadius: 26,
-                    offset: const Offset(0, 12),
-                    spreadRadius: -12,
-                  ),
-                ],
               ),
-              child: ElevatedButton(
-                onPressed:
-                    (!hasActiveAccount || validationText != null || _isCreating)
-                    ? null
-                    : _openConfirmSheet,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  disabledBackgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
-                  ),
+              const Gap(10),
+              Expanded(
+                child: _resultActionButton(
+                  colors: colors,
+                  text: 'Create Pool',
+                  filled: true,
+                  onPressed: () => _openCreatePoolSheet(token.address),
                 ),
-                child: _isCreating
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Create Token',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 17,
-                        ),
-                      ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -886,10 +1271,12 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
   }
 
   Widget _sectionCard({
+    Key? key,
     required ReefThemeColors colors,
     required Widget child,
   }) {
     return Container(
+      key: key,
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1518,6 +1905,7 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
     _supplyController.clear();
     _iconUrlController.clear();
     setState(() {
+      _selectedTabIndex = 0;
       _burnable = true;
       _mintable = true;
       _isCreating = false;

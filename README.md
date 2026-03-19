@@ -2,6 +2,10 @@
 
 Flutter mobile wallet for the Reef EVM ecosystem.
 
+See also:
+
+- [CHANGELOG.md](/Users/anukul/Desktop/reef-evm-mobile-app/CHANGELOG.md) for a release-oriented summary of shipped work
+
 This app is built around a local-first Reef development workflow and already includes:
 
 - multi-account wallet management

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'service_providers.dart';
 import '../constants/storage_keys.dart';
 import 'package:flutter/material.dart';
+import '../models/fiat_currency.dart';
 
 class SettingsState {
   final String rpcUrl;
@@ -11,6 +12,7 @@ class SettingsState {
   final bool? developerMode;
   final bool? developerExpanded;
   final ThemeMode themeMode;
+  final FiatCurrency fiatCurrency;
 
   SettingsState({
     required this.rpcUrl,
@@ -19,6 +21,7 @@ class SettingsState {
     this.developerMode,
     this.developerExpanded,
     required this.themeMode,
+    required this.fiatCurrency,
   });
 
   SettingsState copyWith({
@@ -28,6 +31,7 @@ class SettingsState {
     bool? developerMode,
     bool? developerExpanded,
     ThemeMode? themeMode,
+    FiatCurrency? fiatCurrency,
   }) {
     return SettingsState(
       rpcUrl: rpcUrl ?? this.rpcUrl,
@@ -36,6 +40,7 @@ class SettingsState {
       developerMode: developerMode ?? this.developerMode,
       developerExpanded: developerExpanded ?? this.developerExpanded,
       themeMode: themeMode ?? this.themeMode,
+      fiatCurrency: fiatCurrency ?? this.fiatCurrency,
     );
   }
 
@@ -60,6 +65,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       developerMode: false,
       developerExpanded: false,
       themeMode: ThemeMode.dark,
+      fiatCurrency: FiatCurrency.usd,
     );
   }
 
@@ -70,6 +76,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final goHome = prefs.getBool(StorageKeys.goHomeOnSwitch) ?? true;
     final developerMode = prefs.getBool(StorageKeys.developerMode) ?? false;
     final themeModeRaw = prefs.getString(StorageKeys.themeMode);
+    final fiatCurrencyRaw = prefs.getString(StorageKeys.fiatCurrency);
 
     state = state.copyWith(
       rpcUrl: rpc,
@@ -78,6 +85,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       developerMode: developerMode,
       developerExpanded: state.developerExpanded,
       themeMode: _parseThemeMode(themeModeRaw),
+      fiatCurrency: FiatCurrencyX.fromCode(fiatCurrencyRaw),
     );
 
     // Update Web3 Service
@@ -118,6 +126,12 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(StorageKeys.themeMode, _themeModeToStorage(mode));
     state = state.copyWith(themeMode: mode);
+  }
+
+  Future<void> setFiatCurrency(FiatCurrency currency) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(StorageKeys.fiatCurrency, currency.code);
+    state = state.copyWith(fiatCurrency: currency);
   }
 
   void setDeveloperExpanded(bool expanded) {
