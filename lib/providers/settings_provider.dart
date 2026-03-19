@@ -108,7 +108,10 @@ class SettingsNotifier extends Notifier<SettingsState> {
   Future<void> setDeveloperMode(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(StorageKeys.developerMode, enabled);
-    state = state.copyWith(developerMode: enabled);
+    state = state.copyWith(
+      developerMode: enabled,
+      developerExpanded: enabled ? state.developerExpanded : false,
+    );
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

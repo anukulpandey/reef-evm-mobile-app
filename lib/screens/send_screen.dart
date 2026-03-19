@@ -494,20 +494,24 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     final feedback = _buildFeedbackUI(context);
     final pageSurface = _isDarkTheme
         ? _colors.pageBackground
-        : _colors.appBackground;
+        : Styles.greyColor;
+    final appBarBackground = _isDarkTheme
+        ? _colors.pageBackground
+        : Colors.deepPurple.shade700;
+    final appBarForeground = _isDarkTheme ? _colors.textPrimary : Colors.white;
 
     return Scaffold(
       backgroundColor: pageSurface,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: pageSurface,
-        foregroundColor: _colors.textPrimary,
+        backgroundColor: appBarBackground,
+        foregroundColor: appBarForeground,
         title: Text(
           l10n.sendToken,
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w700,
             fontSize: 20,
-            color: _colors.textPrimary,
+            color: appBarForeground,
           ),
         ),
       ),
@@ -517,10 +521,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           child:
               feedback ??
               SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 20,
-                  horizontal: 10,
-                ),
+                padding: const EdgeInsets.fromLTRB(10, 24, 10, 20),
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(15),

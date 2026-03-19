@@ -361,35 +361,43 @@ class _AuthPanelCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 84,
-            height: 84,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: colors.accentStrong.withOpacity(0.22),
-                  blurRadius: 20,
-                  offset: const Offset(0, 12),
-                  spreadRadius: -10,
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: imageAssetPath == null
-                  ? DecoratedBox(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: Styles.buttonGradient,
+          Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              width: 84,
+              height: 84,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.accentStrong.withOpacity(0.22),
+                    blurRadius: 20,
+                    offset: const Offset(0, 12),
+                    spreadRadius: -10,
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: imageAssetPath == null
+                    ? DecoratedBox(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: Styles.buttonGradient,
+                        ),
+                        child: Icon(icon, color: Colors.white, size: 38),
+                      )
+                    : ClipOval(
+                        child: Image.asset(
+                          imageAssetPath!,
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                      child: Icon(icon, color: Colors.white, size: 38),
-                    )
-                  : ClipOval(
-                      child: Image.asset(imageAssetPath!, fit: BoxFit.cover),
-                    ),
+              ),
             ),
           ),
           Text(

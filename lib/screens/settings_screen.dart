@@ -195,28 +195,30 @@ class SettingsScreen extends ConsumerWidget {
                     },
                   ),
                 ),
-                const Gap(10),
-                Divider(color: colors.borderColor, thickness: 1.2),
-                _settingsRow(
-                  icon: Icons.code_rounded,
-                  title: l10n.developerSettings,
-                  textColor: colors.textPrimary,
-                  iconColor: colors.textMuted,
-                  trailing: Icon(
-                    developerExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 28,
-                    color: colors.textPrimary,
+                if (settings.developerModeEnabled) ...[
+                  const Gap(10),
+                  Divider(color: colors.borderColor, thickness: 1.2),
+                  _settingsRow(
+                    icon: Icons.code_rounded,
+                    title: l10n.developerSettings,
+                    textColor: colors.textPrimary,
+                    iconColor: colors.textMuted,
+                    trailing: Icon(
+                      developerExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 28,
+                      color: colors.textPrimary,
+                    ),
+                    onTap: () {
+                      ref
+                          .read(settingsProvider.notifier)
+                          .setDeveloperExpanded(!developerExpanded);
+                    },
                   ),
-                  onTap: () {
-                    ref
-                        .read(settingsProvider.notifier)
-                        .setDeveloperExpanded(!developerExpanded);
-                  },
-                ),
-                if (developerExpanded)
-                  _developerPanel(context, ref, settings.rpcUrl, l10n),
+                  if (developerExpanded)
+                    _developerPanel(context, ref, settings.rpcUrl, l10n),
+                ],
               ],
             ),
           ),
