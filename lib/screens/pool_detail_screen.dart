@@ -94,7 +94,6 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
   String _quotedOutDisplay = '0';
   String? _swapError;
   String? _quoteNote;
-  String? _lastTxHash;
 
   @override
   void initState() {
@@ -340,9 +339,6 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     }
 
     try {
-      setState(() {
-        _lastTxHash = result.txHash;
-      });
       await _refreshQuoteAndAllowance();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -434,7 +430,6 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
     }
 
     setState(() {
-      _lastTxHash = result.txHash;
       _amountController.clear();
       _quotedOutRaw = BigInt.zero;
       _quotedOutDisplay = '0';
@@ -634,13 +629,6 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
                     height: 1.35,
                   ),
                 ),
-              ),
-            ],
-            if (_lastTxHash != null) ...[
-              const Gap(6),
-              Text(
-                'Last tx: ${_shortHash(_lastTxHash!)}',
-                style: TextStyle(color: _bodyText, fontWeight: FontWeight.w600),
               ),
             ],
           ],
