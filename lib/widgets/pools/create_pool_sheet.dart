@@ -678,7 +678,7 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     final web3 = ref.read(web3ServiceProvider);
     final chainId = await web3.getChainId();
     final gasPriceWei = await web3.getGasPriceWei();
-    final gasLimit = web3.addLiquidityGasLimit;
+    final gasLimit = web3.pairMintGasLimit;
     final feeWei = gasPriceWei * BigInt.from(gasLimit);
     final feeDisplay = AmountUtils.formatInputAmount(
       AmountUtils.parseNumeric(web3.formatAmountFromRaw(feeWei, 18)),
@@ -687,7 +687,7 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
 
     return TransactionPreview(
       title: poolExists ? 'Add Liquidity' : 'Create Pool',
-      methodName: 'addLiquidity',
+      methodName: 'pairMintLiquidity',
       recipientAddress: accountAddress,
       amountDisplay:
           '$amountAText ${tokenA.symbol.toUpperCase()} + $amountBText ${tokenB.symbol.toUpperCase()}',
@@ -695,14 +695,18 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
           ? 'Reef'
           : 'Chain $chainId',
       chainId: chainId,
-      contractAddress: DexConfig.routerAddress,
+      contractAddress: pairAddress ?? DexConfig.factoryAddress,
       gasLimit: gasLimit,
       gasPriceWei: gasPriceWei,
       estimatedFeeDisplay: '$feeDisplay REEF',
-      calldataHex: '0xe8e33700…',
+      calldataHex: poolExists ? 'pair transfer + mint' : 'create pair + mint',
       fields: <TransactionPreviewField>[
         if (pairAddress != null && poolExists)
           TransactionPreviewField(label: 'Pair', value: pairAddress),
+        const TransactionPreviewField(
+          label: 'Execution path',
+          value: 'Direct pair transfer + mint',
+        ),
         if (_isNative(tokenA) || _isNative(tokenB))
           const TransactionPreviewField(
             label: 'Native handling',
@@ -717,10 +721,6 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
         TransactionPreviewField(
           label: 'Amount B (raw)',
           value: rawB.toString(),
-        ),
-        const TransactionPreviewField(
-          label: 'Router',
-          value: DexConfig.routerAddress,
         ),
         const TransactionPreviewField(
           label: 'Factory',
@@ -754,32 +754,6 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     final normalizedTokenB = _factoryPairTokenAddress(tokenB);
     if (normalizedTokenA.toLowerCase() == normalizedTokenB.toLowerCase()) {
       throw Exception('Token A and Token B resolve to the same pool token.');
-    }
-
-    final deadline = BigInt.from(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000 +
-          (DexConfig.defaultDeadlineMinutes * 60),
-    );
-
-    Future<void> ensureAllowance({
-      required Token token,
-      required BigInt amount,
-    }) async {
-      if (_isNative(token)) return;
-      final allowance = await web3.getErc20Allowance(
-        tokenAddress: token.address,
-        owner: account.address,
-        spender: DexConfig.routerAddress,
-      );
-      if (allowance >= amount) return;
-
-      final approveHash = await web3.approveErc20(
-        account: account,
-        tokenAddress: token.address,
-        spender: DexConfig.routerAddress,
-        amount: amount,
-      );
-      await web3.waitForReceipt(approveHash);
     }
 
     Future<void> ensureWrappedNativeBalance(BigInt requiredAmount) async {
@@ -857,54 +831,9 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
       await ensureWrappedNativeBalance(rawB);
     }
 
-    await ensureAllowance(
-      token: tokenAIsNative
-          ? Token(
-              symbol: 'WREEF',
-              name: 'Wrapped Reef',
-              address: DexConfig.wrappedReefAddress,
-              balance: '0',
-              decimals: 18,
-            )
-          : tokenA,
-      amount: rawA,
+    debugPrint(
+      '[create_pool][direct_pair_mint] using direct pair transfer + mint path',
     );
-    await ensureAllowance(
-      token: tokenBIsNative
-          ? Token(
-              symbol: 'WREEF',
-              name: 'Wrapped Reef',
-              address: DexConfig.wrappedReefAddress,
-              balance: '0',
-              decimals: 18,
-            )
-          : tokenB,
-      amount: rawB,
-    );
-
-    final hasRouterCode = await web3.hasContractCode(DexConfig.routerAddress);
-    if (hasRouterCode) {
-      try {
-        return await web3.addLiquidity(
-          account: account,
-          routerAddress: DexConfig.routerAddress,
-          tokenA: normalizedTokenA,
-          tokenB: normalizedTokenB,
-          amountADesired: rawA,
-          amountBDesired: rawB,
-          amountAMin: BigInt.zero,
-          amountBMin: BigInt.zero,
-          to: accountAddress,
-          deadline: deadline,
-        );
-      } catch (error) {
-        if (_looksLikeUserRejection(error)) rethrow;
-        debugPrint('[create_pool][router_add_fallback] error=$error');
-      }
-      return addLiquidityViaPairMint();
-    }
-
-    debugPrint('[create_pool][router_missing] using direct pair mint fallback');
     return addLiquidityViaPairMint();
   }
 
@@ -1163,15 +1092,6 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
   static String _factoryPairTokenAddress(Token token) {
     if (_isNative(token)) return DexConfig.wrappedReefAddress;
     return token.address;
-  }
-
-  static bool _looksLikeUserRejection(Object error) {
-    final normalized = error.toString().toLowerCase();
-    return normalized.contains('rejected before broadcast') ||
-        normalized.contains('transaction rejected') ||
-        normalized.contains('cancelled by user') ||
-        normalized.contains('canceled by user') ||
-        normalized.contains('user rejected');
   }
 
   static int _compareNormalizedAddresses(String left, String right) {
