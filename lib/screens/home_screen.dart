@@ -14,10 +14,12 @@ import '../providers/pool_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../core/theme/reef_theme_colors.dart';
 import '../core/theme/styles.dart';
+import '../utils/amount_utils.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_components.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/blurable_content.dart';
+import '../widgets/common/reef_loading_widgets.dart';
 import '../widgets/common/token_avatar.dart';
 import '../widgets/home/activity_tab.dart';
 import '../widgets/home/balance_header_delegate.dart';
@@ -68,32 +70,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
             Expanded(
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  SliverPersistentHeader(
-                    delegate: HomeBalanceHeaderDelegate(
-                      portfolioUsd: walletState.portfolioUsd,
-                      showBalance: walletState.showBalance,
-                      balanceTitle: l10n.balanceTitle,
-                      onToggleVisibility: () => ref
-                          .read(walletProvider.notifier)
-                          .toggleBalanceVisibility(),
-                    ),
+              child: Stack(
+                children: [
+                  CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      SliverPersistentHeader(
+                        delegate: HomeBalanceHeaderDelegate(
+                          portfolioUsd: walletState.portfolioUsd,
+                          showBalance: walletState.showBalance,
+                          balanceTitle: l10n.balanceTitle,
+                          onToggleVisibility: () => ref
+                              .read(walletProvider.notifier)
+                              .toggleBalanceVisibility(),
+                        ),
+                      ),
+                      SliverPinnedHeader(child: _buildNavSection()),
+                      if (walletState.activeAccount == null)
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 32,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: _buildNoAccountState(context),
+                          ),
+                        )
+                      else
+                        _buildMainContent(walletState),
+                    ],
                   ),
-                  SliverPinnedHeader(child: _buildNavSection()),
-                  if (walletState.activeAccount == null)
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 40,
-                        vertical: 32,
-                      ),
-                      sliver: SliverToBoxAdapter(
-                        child: _buildNoAccountState(context),
-                      ),
-                    )
-                  else
-                    _buildMainContent(walletState),
+                  if (walletState.isLoading)
+                    Positioned(
+                      top: 14,
+                      right: 14,
+                      child: ReefLoadingPill(label: 'Refreshing wallet'),
+                    ),
                 ],
               ),
             ),
@@ -245,6 +257,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final l10n = AppLocalizations.of(context);
     if (_currentIndex == 0) {
       final tokens = state.portfolioTokens;
+      if (state.isLoading && tokens.isEmpty) {
+        return const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(12, 28, 12, 0),
+            child: ReefLoadingCard(
+              title: 'Loading tokens',
+              subtitle: 'Fetching balances and pricing for your portfolio.',
+            ),
+          ),
+        );
+      }
       if (tokens.isEmpty) {
         return SliverToBoxAdapter(
           child: Center(
@@ -372,7 +395,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           BlurableContent(
                             showContent: showBalance,
                             child: Text(
-                              '${token.balance} ${token.symbol}',
+                              '${AmountUtils.formatCompactToken(token.balance)} ${token.symbol}',
                               style: TextStyle(
                                 color: _colors.textPrimary,
                                 fontWeight: FontWeight.w600,

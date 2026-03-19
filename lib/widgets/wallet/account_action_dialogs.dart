@@ -1,5 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/theme/reef_theme_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/auth_service.dart';
 
@@ -206,65 +210,287 @@ class _ExportPasswordDialogState extends State<_ExportPasswordDialog> {
   @override
   Widget build(BuildContext context) {
     final palette = _dialogPalette(context);
-    return AlertDialog(
-      backgroundColor: palette.background,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: Text(
-        widget.l10n.exportAccount,
-        style: TextStyle(
-          color: palette.title,
-          fontSize: 24,
-          fontWeight: FontWeight.w500,
+    final colors = context.reefColors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final modalBackground = isDarkTheme
+        ? const Color(0xFF3A006A)
+        : const Color(0xFFECE7F6);
+
+    return Center(
+      child: SingleChildScrollView(
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            decoration: BoxDecoration(
+              color: modalBackground,
+              borderRadius: BorderRadius.circular(36),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Image(
+                        image: AssetImage('assets/images/reef.png'),
+                        width: 31,
+                        height: 31,
+                      ),
+                      const Gap(8),
+                      Expanded(
+                        child: Text(
+                          widget.l10n.exportAccount,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: palette.title,
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _loading
+                            ? null
+                            : () => Navigator.of(context).pop(false),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isDarkTheme
+                                ? colors.cardBackground
+                                : Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          padding: const EdgeInsets.all(10),
+                          child: Icon(
+                            CupertinoIcons.xmark,
+                            color: colors.textSecondary,
+                            size: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Gap(16),
+                  Text(
+                    widget.l10n.enterAppPassword,
+                    style: TextStyle(
+                      color: palette.inputLabel,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const Gap(8),
+                  _ExportPasswordInput(
+                    controller: _controller,
+                    palette: palette,
+                    hintText: widget.l10n.enterAppPassword,
+                    showErrorBorder: _invalidPassword,
+                    onChanged: () {
+                      if (!_invalidPassword) return;
+                      setState(() => _invalidPassword = false);
+                    },
+                    onSubmitted: _loading ? null : _submit,
+                  ),
+                  if (_invalidPassword) ...[
+                    const Gap(8),
+                    Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.exclamationmark_triangle_fill,
+                          color: colors.danger,
+                          size: 15,
+                        ),
+                        const Gap(8),
+                        Expanded(
+                          child: Text(
+                            widget.l10n.invalidPassword,
+                            style: TextStyle(
+                              color: palette.inputLabel,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const Gap(24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _loading
+                              ? null
+                              : () => Navigator.of(context).pop(false),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: palette.inputBorder,
+                              width: 1.6,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            backgroundColor: isDarkTheme
+                                ? colors.cardBackground.withOpacity(0.25)
+                                : Colors.white.withOpacity(0.9),
+                          ),
+                          child: Text(
+                            widget.l10n.cancel,
+                            style: TextStyle(
+                              color: palette.title,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Gap(12),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: <Color>[
+                                colors.accent,
+                                colors.accentStrong,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.accentStrong.withOpacity(0.28),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                                spreadRadius: -8,
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: _loading ? null : _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              disabledBackgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                            ),
+                            child: _loading
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                            Colors.white,
+                                          ),
+                                    ),
+                                  )
+                                : Text(
+                                    widget.l10n.exportAccount,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
-      content: TextField(
-        controller: _controller,
+    );
+  }
+}
+
+class _ExportPasswordInput extends StatefulWidget {
+  const _ExportPasswordInput({
+    required this.controller,
+    required this.palette,
+    required this.hintText,
+    required this.showErrorBorder,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final _DialogPalette palette;
+  final String hintText;
+  final bool showErrorBorder;
+  final VoidCallback onChanged;
+  final VoidCallback? onSubmitted;
+
+  @override
+  State<_ExportPasswordInput> createState() => _ExportPasswordInputState();
+}
+
+class _ExportPasswordInputState extends State<_ExportPasswordInput> {
+  bool _obscure = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.reefColors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDarkTheme ? colors.cardBackground : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: widget.showErrorBorder
+              ? colors.danger
+              : widget.palette.inputBorder,
+          width: 1.5,
+        ),
+      ),
+      child: TextField(
+        controller: widget.controller,
         autofocus: true,
-        obscureText: true,
+        obscureText: _obscure,
         textInputAction: TextInputAction.done,
-        cursorColor: palette.accent,
+        cursorColor: widget.palette.accent,
         style: TextStyle(
-          color: palette.inputText,
-          fontSize: 20,
+          color: widget.palette.inputText,
+          fontSize: 18,
           fontWeight: FontWeight.w600,
         ),
-        decoration: _dialogInputDecoration(
-          palette: palette,
-          labelText: widget.l10n.enterAppPassword,
-          errorText: _invalidPassword ? widget.l10n.invalidPassword : null,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: widget.hintText,
+          hintStyle: TextStyle(
+            color: widget.palette.hint,
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+          ),
+          border: InputBorder.none,
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 28,
+          ),
+          suffixIcon: GestureDetector(
+            onTap: () => setState(() => _obscure = !_obscure),
+            child: Icon(
+              _obscure ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+              color: widget.palette.hint,
+              size: 20,
+            ),
+          ),
         ),
-        onChanged: (_) {
-          if (!_invalidPassword) return;
-          setState(() => _invalidPassword = false);
-        },
-        onSubmitted: (_) => _loading ? null : _submit(),
+        onChanged: (_) => widget.onChanged(),
+        onSubmitted: (_) => widget.onSubmitted?.call(),
       ),
-      actions: [
-        TextButton(
-          style: _dialogActionButtonStyle(),
-          onPressed: _loading ? null : () => Navigator.pop(context, false),
-          child: Text(
-            widget.l10n.cancel,
-            style: TextStyle(
-              color: _loading
-                  ? palette.actionText.withOpacity(0.45)
-                  : palette.actionText,
-            ),
-          ),
-        ),
-        TextButton(
-          style: _dialogActionButtonStyle(),
-          onPressed: _loading ? null : _submit,
-          child: Text(
-            widget.l10n.exportAccount,
-            style: TextStyle(
-              color: _loading
-                  ? palette.actionText.withOpacity(0.45)
-                  : palette.actionText,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

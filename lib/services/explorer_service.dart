@@ -29,6 +29,8 @@ class ExplorerService {
   final String _explorerApiV2;
   final String _explorerBaseUrl;
 
+  String get explorerBaseUrl => _explorerBaseUrl;
+
   Future<List<Token>> fetchErc20TokensForAddress(String address) async {
     final normalizedAddress = address.trim();
     if (normalizedAddress.isEmpty) return const <Token>[];

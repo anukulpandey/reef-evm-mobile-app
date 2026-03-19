@@ -46,7 +46,7 @@ class AccountBox extends StatelessWidget {
     this.selectedText = 'Selected',
     this.addressPrefix = 'Address',
     this.selectAccountText = 'Select Account',
-    this.copyEvmAddressText = 'Copy EVM Address',
+    this.copyEvmAddressText = 'Copy Address',
     this.renameAccountText = 'Rename Account',
     this.deleteText = 'Delete',
     this.exportMnemonicText = 'Export Mnemonic',

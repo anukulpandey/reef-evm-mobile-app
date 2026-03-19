@@ -145,6 +145,7 @@ class WalletNotifier extends Notifier<WalletState> {
     final web3Service = ref.read(web3ServiceProvider);
     final explorerService = ref.read(explorerServiceProvider);
     final poolService = ref.read(poolServiceProvider);
+    final createdTokenRegistry = ref.read(createdTokenRegistryServiceProvider);
     final accountAddress = state.activeAccount!.address;
 
     try {
@@ -157,6 +158,7 @@ class WalletNotifier extends Notifier<WalletState> {
       final explorerBalances = await explorerService.fetchErc20TokensForAddress(
         accountAddress,
       );
+      final createdTokens = await createdTokenRegistry.getTokens();
       List<Token> erc20Tokens = explorerBalances;
 
       // Fallback only when explorer wallet token balances are unavailable.
@@ -165,14 +167,14 @@ class WalletNotifier extends Notifier<WalletState> {
         erc20Tokens = await _buildErc20Portfolio(
           accountAddress: accountAddress,
           web3Service: web3Service,
-          tokenCatalog: tokenCatalog,
+          tokenCatalog: _mergeTokenCatalogs(tokenCatalog, createdTokens),
         );
       } else {
         // Explorer can lag indexing; hydrate discovered tokens from on-chain balanceOf.
         erc20Tokens = await _buildErc20Portfolio(
           accountAddress: accountAddress,
           web3Service: web3Service,
-          tokenCatalog: erc20Tokens,
+          tokenCatalog: _mergeTokenCatalogs(erc20Tokens, createdTokens),
         );
       }
 
@@ -369,6 +371,27 @@ class WalletNotifier extends Notifier<WalletState> {
         : (tokenUsdByAddress[token.address.toLowerCase()] ?? 0);
     final usdValue = AmountUtils.parseNumeric(token.balance) * usdPrice;
     return token.copyWith(usdPrice: usdPrice, usdValue: usdValue);
+  }
+
+  List<Token> _mergeTokenCatalogs(List<Token> primary, List<Token> secondary) {
+    final merged = <String, Token>{};
+    for (final token in [...primary, ...secondary]) {
+      final key = token.address.trim().toLowerCase();
+      if (key.isEmpty || key == 'native') continue;
+      final previous = merged[key];
+      if (previous == null) {
+        merged[key] = token;
+        continue;
+      }
+      merged[key] = previous.copyWith(
+        symbol: token.symbol.isNotEmpty ? token.symbol : previous.symbol,
+        name: token.name.isNotEmpty ? token.name : previous.name,
+        decimals: token.decimals,
+        iconUrl: token.iconUrl ?? previous.iconUrl,
+        balance: token.balance,
+      );
+    }
+    return merged.values.toList(growable: false);
   }
 
   void toggleBalanceVisibility() {

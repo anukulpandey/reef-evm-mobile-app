@@ -2,12 +2,21 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:web3dart/web3dart.dart';
 import 'package:web3dart/json_rpc.dart';
-import 'package:web3dart/crypto.dart' show bytesToHex;
+import 'package:web3dart/crypto.dart' show bytesToHex, hexToBytes;
 import 'package:http/http.dart';
 import '../core/config/dex_config.dart';
 import '../models/account.dart';
 import '../utils/amount_utils.dart';
 import '../utils/transaction_error_mapper.dart';
+
+class ContractCodeRejectedException implements Exception {
+  const ContractCodeRejectedException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class Web3Service {
   late Web3Client _client;
@@ -52,6 +61,7 @@ class Web3Service {
   static const int _wrapNativeGasLimit = 350000;
   static const int _pairMintGasLimit = 900000;
   static const int _pairSwapGasLimit = 1200000;
+  static const int _contractDeployGasLimit = 4500000;
   int get nativeTransferGasLimit => _nativeTransferGasLimit;
   int get erc20TransferGasLimit => _erc20TransferGasLimit;
   int get erc20ApproveGasLimit => _erc20ApproveGasLimit;
@@ -62,6 +72,7 @@ class Web3Service {
   int get wrapNativeGasLimit => _wrapNativeGasLimit;
   int get pairMintGasLimit => _pairMintGasLimit;
   int get pairSwapGasLimit => _pairSwapGasLimit;
+  int get contractDeployGasLimit => _contractDeployGasLimit;
 
   Future<String> getBalance(String address) async {
     final rpcBalance = await _getBalanceViaRpc(address);
@@ -818,6 +829,60 @@ class Web3Service {
     }
   }
 
+  Future<int> estimateContractDeploymentGasLimit({
+    required String fromAddress,
+    required String abiJson,
+    required String bytecodeHex,
+    required List<dynamic> constructorArgs,
+    int? configuredGasLimit,
+  }) async {
+    final from = _parseAddressOrThrow(fromAddress, field: 'sender');
+    final gasPriceWei = await getGasPriceWei();
+    final transaction = Transaction(
+      from: from,
+      gasPrice: EtherAmount.inWei(gasPriceWei),
+      data: _buildDeploymentData(
+        abiJson: abiJson,
+        bytecodeHex: bytecodeHex,
+        constructorArgs: constructorArgs,
+      ),
+      maxGas: configuredGasLimit ?? _contractDeployGasLimit,
+    );
+    return _resolveGasLimit(
+      transaction,
+      from,
+      contextLabel: 'contract_deploy/preview',
+    );
+  }
+
+  Future<String> deployContract({
+    required Account account,
+    required String abiJson,
+    required String bytecodeHex,
+    required List<dynamic> constructorArgs,
+    String contextLabel = 'contract_deploy',
+    int? gasLimit,
+  }) async {
+    final transaction = Transaction(
+      data: _buildDeploymentData(
+        abiJson: abiJson,
+        bytecodeHex: bytecodeHex,
+        constructorArgs: constructorArgs,
+      ),
+      maxGas: gasLimit ?? _contractDeployGasLimit,
+    );
+    return _signAndBroadcast(
+      account: account,
+      transaction: transaction,
+      contextLabel: contextLabel,
+      debugExtras: <String, dynamic>{
+        'constructorArgs': constructorArgs
+            .map((item) => item.toString())
+            .toList(),
+      },
+    );
+  }
+
   Future<int> _resolveChainId() async {
     try {
       final response = await _httpClient.post(
@@ -890,6 +955,20 @@ class Web3Service {
     throw Exception('Timed out waiting for transaction receipt');
   }
 
+  Future<TransactionReceipt> waitForReceiptAndGet(
+    String txHash, {
+    Duration timeout = const Duration(minutes: 3),
+    Duration pollInterval = const Duration(seconds: 2),
+  }) async {
+    final started = DateTime.now();
+    while (DateTime.now().difference(started) < timeout) {
+      final receipt = await _client.getTransactionReceipt(txHash);
+      if (receipt != null) return receipt;
+      await Future<void>.delayed(pollInterval);
+    }
+    throw Exception('Timed out waiting for transaction receipt');
+  }
+
   Future<String> _signAndBroadcast({
     required Account account,
     required Transaction transaction,
@@ -943,6 +1022,14 @@ class Web3Service {
       print(
         '[tx][rpc_error] context=$contextLabel code=${rpcError.errorCode} msg=${rpcError.message} data=${rpcError.data}',
       );
+      if (_isContractCodeRejected(rpcError) &&
+          contextLabel.startsWith('contract_deploy')) {
+        throw ContractCodeRejectedException(
+          rpcError.message.isEmpty
+              ? 'Contract bytecode was rejected by the local node.'
+              : rpcError.message,
+        );
+      }
       if (_isRetryableInvalidTransaction(rpcError)) {
         final nextNonce = await _recommendedNonce(signerAddress);
         final currentGasPrice = preparedTx.gasPrice?.getInWei ?? BigInt.zero;
@@ -1144,6 +1231,31 @@ class Web3Service {
     }
   }
 
+  Uint8List _buildDeploymentData({
+    required String abiJson,
+    required String bytecodeHex,
+    required List<dynamic> constructorArgs,
+  }) {
+    final abi = ContractAbi.fromJson(abiJson, 'DeployableContract');
+    final normalizedBytecode = bytecodeHex.startsWith('0x')
+        ? bytecodeHex.substring(2)
+        : bytecodeHex;
+    final bytecode = hexToBytes(normalizedBytecode);
+    ContractFunction? constructor;
+    for (final function in abi.functions) {
+      if (function.isConstructor) {
+        constructor = function;
+        break;
+      }
+    }
+    final encodedArgs = constructor == null
+        ? Uint8List(0)
+        : Uint8List.fromList(
+            constructor.encodeCall(constructorArgs).sublist(4),
+          );
+    return Uint8List.fromList(<int>[...bytecode, ...encodedArgs]);
+  }
+
   static String _toRpcQuantity(BigInt value) {
     if (value <= BigInt.zero) return '0x0';
     return '0x${value.toRadixString(16)}';
@@ -1174,6 +1286,15 @@ class Web3Service {
         raw.contains('nonce') ||
         raw.contains('underpriced') ||
         raw.contains('replacement');
+  }
+
+  bool _isContractCodeRejected(RPCError rpcError) {
+    final raw = <String>[
+      rpcError.message,
+      if (rpcError.data != null) rpcError.data.toString(),
+    ].join(' ').toLowerCase();
+    return raw.contains('coderejected') ||
+        raw.contains('failed to instantiate contract');
   }
 
   Future<void> _assertSufficientBalance(

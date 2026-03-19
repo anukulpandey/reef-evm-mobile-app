@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 
 import '../core/theme/reef_theme_colors.dart';
+import '../core/theme/styles.dart';
 import '../models/transaction_preview.dart';
 import '../providers/service_providers.dart';
 import '../utils/address_utils.dart';
@@ -34,6 +35,7 @@ class _TransactionConfirmationScreenState
   final TextEditingController _passwordController = TextEditingController();
   bool _hasPassword = true;
   bool _isSubmitting = false;
+  bool _obscurePassword = true;
   String? _errorTitle;
   String? _errorText;
   bool _showRecoveryActions = false;
@@ -351,263 +353,279 @@ class _TransactionConfirmationScreenState
   Widget build(BuildContext context) {
     final preview = widget.preview;
     final colors = context.reefColors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     final gasPriceGwei = preview.gasPriceWei == null
         ? '--'
         : NumberFormat(
             '0.######',
           ).format(preview.gasPriceWei!.toDouble() / 1000000000).trim();
+    final screenBackground = isDarkTheme
+        ? const Color(0xFF1E0B3B)
+        : Styles.greyColor;
+    final appBarBackground = isDarkTheme
+        ? const Color(0xFF5A23A5)
+        : Colors.deepPurple.shade700;
+    const appBarForeground = Colors.white;
 
     return Scaffold(
-      backgroundColor: colors.pageBackground,
+      backgroundColor: screenBackground,
       appBar: AppBar(
-        backgroundColor: colors.pageBackground,
+        backgroundColor: appBarBackground,
         elevation: 0,
-        foregroundColor: colors.textPrimary,
+        foregroundColor: appBarForeground,
         title: Text(
           'Confirm Transaction',
-          style: GoogleFonts.poppins(
-            color: colors.textPrimary,
+          style: GoogleFonts.spaceGrotesk(
+            color: appBarForeground,
             fontWeight: FontWeight.w700,
-            fontSize: 20,
+            fontSize: 21,
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      body: SafeArea(
+        top: false,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionCard(
-              colors: colors,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _titleValue('Method', preview.methodName, colors: colors),
-                  const Gap(12),
-                  _titleValue(
-                    'Recipient',
-                    AddressUtils.shorten(preview.recipientAddress),
-                    colors: colors,
-                  ),
-                  const Gap(12),
-                  _titleValue('Amount', preview.amountDisplay, colors: colors),
-                  const Gap(12),
-                  _titleValue(
-                    'Network',
-                    '${preview.networkName} (Chain ID: ${preview.chainId})',
-                    colors: colors,
-                  ),
-                  if ((preview.contractAddress ?? '').trim().isNotEmpty) ...[
-                    const Gap(12),
-                    _titleValue(
-                      'Contract',
-                      AddressUtils.shorten(preview.contractAddress!),
-                      colors: colors,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Gap(12),
-            _sectionCard(
-              colors: colors,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Decoded Data',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  const Gap(10),
-                  if (preview.fields.isEmpty)
-                    Text(
-                      'No additional parameters',
-                      style: TextStyle(color: colors.textSecondary),
-                    ),
-                  for (final field in preview.fields)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _titleValue(
-                        field.label,
-                        field.value,
-                        colors: colors,
-                      ),
-                    ),
-                  if ((preview.calldataHex ?? '').trim().isNotEmpty) ...[
-                    const Gap(6),
-                    _titleValue(
-                      'Calldata',
-                      AddressUtils.shorten(
-                        preview.calldataHex!,
-                        prefixLength: 10,
-                        suffixLength: 8,
-                      ),
-                      colors: colors,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Gap(12),
-            _sectionCard(
-              colors: colors,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _titleValue(
-                    'Estimated Network Fee',
-                    preview.estimatedFeeDisplay ?? '--',
-                    colors: colors,
-                  ),
-                  const Gap(12),
-                  _titleValue(
-                    'Gas Limit',
-                    preview.gasLimit?.toString() ?? '--',
-                    colors: colors,
-                  ),
-                  const Gap(12),
-                  _titleValue(
-                    'Gas Price',
-                    '$gasPriceGwei Gwei',
-                    colors: colors,
-                  ),
-                ],
-              ),
-            ),
-            const Gap(12),
-            _sectionCard(
-              colors: colors,
-              child: TextField(
-                controller: _passwordController,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Wallet Password',
-                  hintText: 'Enter wallet password',
-                  hintStyle: TextStyle(
-                    color: colors.textMuted,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  floatingLabelStyle: TextStyle(
-                    color: colors.accentStrong,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(color: colors.inputBorder),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: colors.inputBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: colors.accentStrong),
-                  ),
-                ),
-              ),
-            ),
-            if (!_hasPassword) ...[
-              const Gap(8),
-              _sectionCard(
-                colors: colors,
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'You must set an app password before signing transactions.',
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    _buildSummaryCard(
+                      preview: preview,
+                      colors: colors,
+                      isDarkTheme: isDarkTheme,
                     ),
-                    const Gap(8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton(
-                        onPressed: _isSubmitting
-                            ? null
-                            : _handleSetPasswordPressed,
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: colors.accentStrong),
-                          foregroundColor: colors.accentStrong,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    const Gap(16),
+                    _sectionCard(
+                      colors: colors,
+                      radius: 28,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionHeading(
+                            'Transaction details',
+                            'Review the decoded values before signing.',
+                            colors: colors,
                           ),
-                        ),
-                        child: const Text('Set Password'),
+                          const Gap(14),
+                          if (preview.fields.isEmpty)
+                            _detailValueTile(
+                              label: 'Details',
+                              value: 'No additional parameters',
+                              colors: colors,
+                            ),
+                          for (final field in preview.fields) ...[
+                            _detailValueTile(
+                              label: field.label,
+                              value: field.value,
+                              colors: colors,
+                            ),
+                            const Gap(10),
+                          ],
+                          _detailValueTile(
+                            label: 'Method',
+                            value: _formatMethodName(preview.methodName),
+                            colors: colors,
+                          ),
+                          if ((preview.calldataHex ?? '')
+                              .trim()
+                              .isNotEmpty) ...[
+                            const Gap(10),
+                            _detailValueTile(
+                              label: 'Calldata',
+                              value: preview.calldataHex!,
+                              colors: colors,
+                              monospace: true,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
+                    const Gap(16),
+                    _sectionCard(
+                      colors: colors,
+                      radius: 28,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionHeading(
+                            'Network fee',
+                            'The final gas usage may vary slightly on chain.',
+                            colors: colors,
+                          ),
+                          const Gap(14),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              _metricCard(
+                                label: 'Estimated fee',
+                                value: preview.estimatedFeeDisplay ?? '--',
+                                colors: colors,
+                              ),
+                              _metricCard(
+                                label: 'Gas limit',
+                                value: _formatLargeNumber(preview.gasLimit),
+                                colors: colors,
+                              ),
+                              _metricCard(
+                                label: 'Gas price',
+                                value: '$gasPriceGwei Gwei',
+                                colors: colors,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Gap(16),
+                    _sectionCard(
+                      colors: colors,
+                      radius: 28,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionHeading(
+                            'Wallet password',
+                            _hasPassword
+                                ? 'Password and biometric approval are required to sign.'
+                                : 'Set your app password before approving this transaction.',
+                            colors: colors,
+                          ),
+                          const Gap(14),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: colors.cardBackgroundSecondary,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: colors.inputBorder,
+                                width: 1.2,
+                              ),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
+                            child: TextField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              enableSuggestions: false,
+                              autocorrect: false,
+                              style: GoogleFonts.spaceGrotesk(
+                                color: colors.textPrimary,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Enter wallet password',
+                                hintStyle: TextStyle(
+                                  color: colors.textMuted,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                filled: false,
+                                fillColor: Colors.transparent,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                focusedErrorBorder: InputBorder.none,
+                                prefixIcon: Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: colors.textMuted,
+                                  size: 20,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18,
+                                ),
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!_hasPassword) ...[
+                            const Gap(12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: colors.cardBackgroundSecondary,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: colors.borderColor),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.shield_outlined,
+                                    color: colors.accentStrong,
+                                    size: 20,
+                                  ),
+                                  const Gap(10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Set an app password before signing transactions.',
+                                          style: TextStyle(
+                                            color: colors.textSecondary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const Gap(10),
+                                        OutlinedButton(
+                                          onPressed: _isSubmitting
+                                              ? null
+                                              : _handleSetPasswordPressed,
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(
+                                              color: colors.accentStrong,
+                                            ),
+                                            foregroundColor:
+                                                colors.accentStrong,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                            ),
+                                          ),
+                                          child: const Text('Set Password'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const Gap(12),
+                    if (_errorText != null) _buildErrorAlert(colors: colors),
                   ],
                 ),
               ),
-            ],
-            const Gap(8),
-            if (_errorText != null) _buildErrorAlert(colors: colors),
-            const Gap(14),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () => Navigator.of(context).pop(
-                            const TransactionApprovalResult(approved: false),
-                          ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: colors.borderColor),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(
-                      widget.rejectButtonText,
-                      style: GoogleFonts.poppins(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                const Gap(10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _approveTransaction,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      backgroundColor: colors.accentStrong,
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            widget.approveButtonText,
-                            style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
             ),
+            _buildBottomActions(colors: colors),
           ],
         ),
       ),
@@ -704,14 +722,15 @@ class _TransactionConfirmationScreenState
   static Widget _sectionCard({
     required Widget child,
     required ReefThemeColors colors,
+    double radius = 14,
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: colors.cardBackground.withOpacity(0.85),
         border: Border.all(color: colors.borderColor),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: child,
     );
@@ -744,5 +763,410 @@ class _TransactionConfirmationScreenState
         ),
       ],
     );
+  }
+
+  Widget _buildSummaryCard({
+    required TransactionPreview preview,
+    required ReefThemeColors colors,
+    required bool isDarkTheme,
+  }) {
+    final topLabel = preview.title.trim().isNotEmpty
+        ? preview.title.trim()
+        : _formatMethodName(preview.methodName);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: colors.cardBackground,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: colors.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: (isDarkTheme ? Colors.black : colors.accentStrong)
+                .withOpacity(isDarkTheme ? 0.18 : 0.08),
+            blurRadius: 32,
+            offset: const Offset(0, 14),
+            spreadRadius: -18,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [colors.accent, colors.accentStrong],
+                  ),
+                ),
+                child: const Center(
+                  child: Image(
+                    image: AssetImage('assets/images/reef.png'),
+                    width: 28,
+                    height: 28,
+                  ),
+                ),
+              ),
+              const Gap(14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      topLabel,
+                      style: GoogleFonts.spaceGrotesk(
+                        color: colors.textPrimary,
+                        fontSize: 27,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
+                    ),
+                    const Gap(6),
+                    Text(
+                      'Review all transaction details before signing.',
+                      style: TextStyle(
+                        color: colors.textMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Gap(18),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: colors.cardBackgroundSecondary,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'You are about to approve',
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const Gap(8),
+                Text(
+                  preview.amountDisplay,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: colors.textPrimary,
+                    fontSize: 31,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
+                ),
+                const Gap(14),
+                _summaryRow(
+                  label: preview.recipientLabel,
+                  value: AddressUtils.shorten(
+                    preview.recipientAddress,
+                    prefixLength: 7,
+                    suffixLength: 5,
+                  ),
+                  colors: colors,
+                ),
+                const Gap(10),
+                _summaryRow(
+                  label: 'Network',
+                  value: '${preview.networkName} • ${preview.chainId}',
+                  colors: colors,
+                ),
+                if ((preview.contractAddress ?? '').trim().isNotEmpty) ...[
+                  const Gap(10),
+                  _summaryRow(
+                    label: 'Contract',
+                    value: AddressUtils.shorten(
+                      preview.contractAddress!,
+                      prefixLength: 7,
+                      suffixLength: 5,
+                    ),
+                    colors: colors,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActions({required ReefThemeColors colors}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+      decoration: BoxDecoration(
+        color: colors.appBackground,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 22,
+            offset: const Offset(0, -8),
+            spreadRadius: -18,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _isSubmitting
+                  ? null
+                  : () => Navigator.of(
+                      context,
+                    ).pop(const TransactionApprovalResult(approved: false)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: colors.inputBorder, width: 1.6),
+                backgroundColor: Theme.of(context).brightness == Brightness.dark
+                    ? colors.cardBackground.withOpacity(0.25)
+                    : Colors.white.withOpacity(0.9),
+                foregroundColor: colors.textPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+              ),
+              child: Text(
+                widget.rejectButtonText,
+                style: GoogleFonts.spaceGrotesk(
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          const Gap(12),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: <Color>[colors.accent, colors.accentStrong],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.accentStrong.withOpacity(0.28),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                    spreadRadius: -10,
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _approveTransaction,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  disabledBackgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        widget.approveButtonText,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeading(
+    String title,
+    String subtitle, {
+    required ReefThemeColors colors,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.spaceGrotesk(
+            color: colors.textPrimary,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            height: 1,
+          ),
+        ),
+        const Gap(6),
+        Text(
+          subtitle,
+          style: TextStyle(
+            color: colors.textMuted,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryRow({
+    required String label,
+    required String value,
+    required ReefThemeColors colors,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 74,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: colors.textMuted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const Gap(10),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _detailValueTile({
+    required String label,
+    required String value,
+    required ReefThemeColors colors,
+    bool monospace = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.cardBackgroundSecondary,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Gap(6),
+          SelectableText(
+            value,
+            style:
+                (monospace
+                        ? GoogleFonts.robotoMono()
+                        : GoogleFonts.spaceGrotesk())
+                    .copyWith(
+                      color: colors.textPrimary,
+                      fontSize: monospace ? 13 : 16,
+                      fontWeight: FontWeight.w600,
+                      height: 1.25,
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricCard({
+    required String label,
+    required String value,
+    required ReefThemeColors colors,
+  }) {
+    return SizedBox(
+      width: 160,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colors.cardBackgroundSecondary,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: colors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Gap(6),
+            Text(
+              value,
+              style: GoogleFonts.spaceGrotesk(
+                color: colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatLargeNumber(int? value) {
+    if (value == null) return '--';
+    return NumberFormat.decimalPattern().format(value);
+  }
+
+  String _formatMethodName(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'Transaction';
+    final normalized = trimmed
+        .replaceAll('_', ' ')
+        .replaceAllMapped(RegExp(r'(?<=[a-z])(?=[A-Z])'), (_) => ' ');
+    final words = normalized
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .map(
+          (word) =>
+              '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+        )
+        .toList();
+    return words.join(' ');
   }
 }

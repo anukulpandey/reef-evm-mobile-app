@@ -12,6 +12,7 @@ import '../utils/amount_utils.dart';
 import '../widgets/official_top_bar.dart';
 import '../widgets/official_account_box.dart';
 import '../widgets/add_account_modal.dart';
+import '../widgets/common/reef_loading_widgets.dart';
 import '../widgets/wallet/account_action_dialogs.dart';
 import '../core/theme/styles.dart';
 
@@ -60,9 +61,21 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             ),
           ),
           Expanded(
-            child: walletState.activeAccount == null
-                ? _buildNoAccountState(context, l10n)
-                : _buildAccountList(context, ref, walletState, l10n),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: walletState.activeAccount == null
+                      ? _buildNoAccountState(context, l10n)
+                      : _buildAccountList(context, ref, walletState, l10n),
+                ),
+                if (walletState.isLoading)
+                  const Positioned(
+                    top: 12,
+                    right: 16,
+                    child: ReefLoadingPill(label: 'Syncing accounts'),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -209,9 +222,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 28),
-                child: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFB9359A)),
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: ReefLoadingCard(
+                  title: 'Loading accounts',
+                  subtitle: 'Syncing stored accounts and balances.',
+                  compact: true,
                 ),
               );
             }

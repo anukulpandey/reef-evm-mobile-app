@@ -7,6 +7,8 @@ import '../services/pool_service.dart';
 import '../services/fcm_service.dart';
 import '../services/explorer_service.dart';
 import '../services/activity_service.dart';
+import '../services/created_token_registry_service.dart';
+import '../services/token_creator_service.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>((ref) {
   return SecureStorageService();
@@ -39,4 +41,14 @@ final activityServiceProvider = Provider<ActivityService>((ref) {
 
 final fcmServiceProvider = Provider<FCMService>((ref) {
   return FCMService();
+});
+
+final createdTokenRegistryServiceProvider =
+    Provider<CreatedTokenRegistryService>((ref) {
+      return const CreatedTokenRegistryService();
+    });
+
+final tokenCreatorServiceProvider = Provider<TokenCreatorService>((ref) {
+  final registry = ref.watch(createdTokenRegistryServiceProvider);
+  return TokenCreatorService(registry);
 });

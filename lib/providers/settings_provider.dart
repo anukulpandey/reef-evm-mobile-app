@@ -8,6 +8,7 @@ class SettingsState {
   final String rpcUrl;
   final bool? useBiometrics;
   final bool? goHomeOnSwitch;
+  final bool? developerMode;
   final bool? developerExpanded;
   final ThemeMode themeMode;
 
@@ -15,6 +16,7 @@ class SettingsState {
     required this.rpcUrl,
     required this.useBiometrics,
     required this.goHomeOnSwitch,
+    this.developerMode,
     this.developerExpanded,
     required this.themeMode,
   });
@@ -23,6 +25,7 @@ class SettingsState {
     String? rpcUrl,
     bool? useBiometrics,
     bool? goHomeOnSwitch,
+    bool? developerMode,
     bool? developerExpanded,
     ThemeMode? themeMode,
   }) {
@@ -30,11 +33,13 @@ class SettingsState {
       rpcUrl: rpcUrl ?? this.rpcUrl,
       useBiometrics: useBiometrics ?? this.useBiometrics,
       goHomeOnSwitch: goHomeOnSwitch ?? this.goHomeOnSwitch,
+      developerMode: developerMode ?? this.developerMode,
       developerExpanded: developerExpanded ?? this.developerExpanded,
       themeMode: themeMode ?? this.themeMode,
     );
   }
 
+  bool get developerModeEnabled => developerMode ?? false;
   bool get isDeveloperExpanded => developerExpanded ?? false;
   bool get biometricsEnabled => useBiometrics ?? false;
   bool get goHomeEnabled => goHomeOnSwitch ?? true;
@@ -52,6 +57,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       rpcUrl: _defaultRpcUrl,
       useBiometrics: false,
       goHomeOnSwitch: true,
+      developerMode: false,
       developerExpanded: false,
       themeMode: ThemeMode.dark,
     );
@@ -62,12 +68,14 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final rpc = prefs.getString(StorageKeys.rpcUrl) ?? _defaultRpcUrl;
     final biometrics = prefs.getBool(StorageKeys.useBiometrics) ?? false;
     final goHome = prefs.getBool(StorageKeys.goHomeOnSwitch) ?? true;
+    final developerMode = prefs.getBool(StorageKeys.developerMode) ?? false;
     final themeModeRaw = prefs.getString(StorageKeys.themeMode);
 
     state = state.copyWith(
       rpcUrl: rpc,
       useBiometrics: biometrics,
       goHomeOnSwitch: goHome,
+      developerMode: developerMode,
       developerExpanded: state.developerExpanded,
       themeMode: _parseThemeMode(themeModeRaw),
     );
@@ -95,6 +103,12 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(StorageKeys.goHomeOnSwitch, enabled);
     state = state.copyWith(goHomeOnSwitch: enabled);
+  }
+
+  Future<void> setDeveloperMode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(StorageKeys.developerMode, enabled);
+    state = state.copyWith(developerMode: enabled);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

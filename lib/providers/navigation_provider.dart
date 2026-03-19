@@ -5,7 +5,7 @@ class NavigationTabNotifier extends Notifier<int> {
   int build() => 0;
 
   void setIndex(int index) {
-    if (index < 0 || index > 3) return;
+    if (index < 0) return;
     state = index;
   }
 

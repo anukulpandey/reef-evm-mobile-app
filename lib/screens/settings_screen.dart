@@ -181,6 +181,20 @@ class SettingsScreen extends ConsumerWidget {
                     ).showSnackBar(SnackBar(content: Text(l10n.copied)));
                   },
                 ),
+                _settingsRow(
+                  icon: Icons.auto_awesome_rounded,
+                  title: 'Developer Mode',
+                  textColor: colors.textPrimary,
+                  iconColor: colors.textMuted,
+                  trailing: _SettingsCheckbox(
+                    value: settings.developerModeEnabled,
+                    onChanged: (value) {
+                      ref
+                          .read(settingsProvider.notifier)
+                          .setDeveloperMode(value);
+                    },
+                  ),
+                ),
                 const Gap(10),
                 Divider(color: colors.borderColor, thickness: 1.2),
                 _settingsRow(

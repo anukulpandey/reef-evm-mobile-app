@@ -13,6 +13,7 @@ import '../../utils/amount_utils.dart';
 import '../../utils/token_icon_resolver.dart';
 import '../../widgets/blurable_content.dart';
 import '../../widgets/common/token_avatar.dart';
+import '../../widgets/common/reef_loading_widgets.dart';
 
 class ActivityTab extends ConsumerStatefulWidget {
   const ActivityTab({
@@ -200,19 +201,31 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
                     ),
                   ),
                   const Gap(10),
-                  BlurableContent(
-                    showContent: widget.showBalances,
-                    child: Text(
-                      '+${_formatAmount(swapDetails.toAmount)} ${swapDetails.toSymbol}',
-                      style: TextStyle(
-                        color: _colors.textMuted,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      BlurableContent(
+                        showContent: widget.showBalances,
+                        child: Text(
+                          '+${_formatAmount(swapDetails.toAmount)}',
+                          style: TextStyle(
+                            color: _colors.textMuted,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
                       ),
-                      textAlign: TextAlign.right,
-                    ),
+                      const Gap(8),
+                      TokenAvatar(
+                        size: 20,
+                        iconUrl: item.tokenIconUrl,
+                        fallbackSeed: swapDetails.toSymbol,
+                        resolveFallbackIcon: true,
+                      ),
+                    ],
                   ),
-                  const Gap(6),
+                  const Gap(8),
                   Icon(
                     isExpanded
                         ? Icons.expand_less_rounded
@@ -419,19 +432,10 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
   }
 
   Widget _buildLoadingCard() {
-    return Container(
-      height: 180,
-      decoration: BoxDecoration(
-        color: _colors.cardBackground,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: _colors.borderColor),
-      ),
-      child: Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2.4,
-          color: _colors.accentStrong,
-        ),
-      ),
+    return const ReefLoadingCard(
+      title: 'Loading activity',
+      subtitle: 'Fetching transfers, swaps, and account history.',
+      compact: true,
     );
   }
 

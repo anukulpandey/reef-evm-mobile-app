@@ -492,12 +492,15 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final feedback = _buildFeedbackUI(context);
+    final pageSurface = _isDarkTheme
+        ? _colors.pageBackground
+        : _colors.appBackground;
 
     return Scaffold(
-      backgroundColor: _colors.pageBackground,
+      backgroundColor: pageSurface,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: _colors.pageBackground,
+        backgroundColor: pageSurface,
         foregroundColor: _colors.textPrimary,
         title: Text(
           l10n.sendToken,
@@ -584,9 +587,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 color: _colors.accentStrong.withOpacity(0.28),
               ),
           ],
-          color: _isRecipientEditing
-              ? _colors.inputFill
-              : _colors.cardBackgroundSecondary,
+          color: _colors.cardBackgroundSecondary,
         ),
         child: Row(
           children: [
@@ -687,9 +688,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 color: _colors.accentStrong.withOpacity(0.28),
               ),
           ],
-          color: _isAmountEditing
-              ? _colors.inputFill
-              : _colors.cardBackgroundSecondary,
+          color: _colors.cardBackgroundSecondary,
         ),
         child: Row(
           children: [

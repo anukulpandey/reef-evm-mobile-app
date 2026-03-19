@@ -9,6 +9,7 @@ import '../providers/wallet_provider.dart';
 import '../core/theme/styles.dart';
 import '../core/theme/reef_theme_colors.dart';
 import '../widgets/official_top_bar.dart';
+import '../widgets/common/reef_loading_widgets.dart';
 import '../widgets/pools/create_pool_sheet.dart';
 import '../widgets/pools/pool_list_card.dart';
 import 'pool_detail_screen.dart';
@@ -81,57 +82,14 @@ class PoolsScreen extends ConsumerWidget {
                   ),
                 ),
                 const Gap(12),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [colors.accent, colors.accentStrong],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: colors.borderColor.withOpacity(0.5),
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x2B080314),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton.icon(
-                    onPressed: () => _onCreatePoolTap(
-                      context,
-                      ref,
-                      canCreatePool: canCreatePool,
-                    ),
-                    icon: const Icon(
-                      Icons.add_rounded,
-                      size: 18,
-                      color: Colors.white,
-                    ),
-                    label: Text(
-                      canCreatePool ? 'New Pool' : 'Need 2 Tokens',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      disabledBackgroundColor: Colors.transparent,
-                      disabledForegroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
+                _actionButton(
+                  colors: colors,
+                  icon: Icons.add_rounded,
+                  label: canCreatePool ? 'New Pool' : 'Need 2 Tokens',
+                  onPressed: () => _onCreatePoolTap(
+                    context,
+                    ref,
+                    canCreatePool: canCreatePool,
                   ),
                 ),
               ],
@@ -140,8 +98,13 @@ class PoolsScreen extends ConsumerWidget {
           const Gap(12),
           Expanded(
             child: poolsAsyncValue.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: Colors.white),
+              loading: () => const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: ReefLoadingCard(
+                  title: 'Loading pools',
+                  subtitle:
+                      'Fetching indexed liquidity pairs from the subgraph.',
+                ),
               ),
               error: (err, stack) => Center(
                 child: Text(
@@ -238,6 +201,54 @@ class PoolsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required ReefThemeColors colors,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [colors.accent, colors.accentStrong],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.borderColor.withOpacity(0.5)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2B080314),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18, color: Colors.white),
+        label: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 13,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          disabledBackgroundColor: Colors.transparent,
+          disabledForegroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
       ),
     );
   }

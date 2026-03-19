@@ -23,6 +23,7 @@ import '../utils/amount_utils.dart';
 import '../utils/transaction_error_mapper.dart';
 import '../widgets/common/always_visible_slider_thumb_shape.dart';
 import '../widgets/blurable_content.dart';
+import '../widgets/common/reef_loading_widgets.dart';
 import '../widgets/common/token_avatar.dart';
 import '../widgets/send/send_amount_slider.dart';
 import 'transaction_confirmation_screen.dart';
@@ -663,6 +664,23 @@ class _PoolDetailScreenState extends ConsumerState<PoolDetailScreen> {
       body: FutureBuilder<List<PoolTransactionEvent>>(
         future: poolService.getPairTransactions(widget.pool.id),
         builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+              children: [
+                _buildPoolHeaderCard(widget.pool),
+                const Gap(14),
+                const ReefLoadingCard(
+                  title: 'Loading pool activity',
+                  subtitle:
+                      'Fetching chart data and recent transactions for this pair.',
+                ),
+                const Gap(14),
+                _buildTradeCtaCard(),
+              ],
+            );
+          }
+
           final transactions = snapshot.data ?? const <PoolTransactionEvent>[];
           final chartSeries = _buildChartSeries(transactions, widget.pool);
 

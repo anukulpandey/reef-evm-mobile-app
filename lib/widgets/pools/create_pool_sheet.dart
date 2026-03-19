@@ -19,10 +19,12 @@ class CreatePoolSheet extends ConsumerStatefulWidget {
   const CreatePoolSheet({
     super.key,
     required this.portfolioTokens,
+    this.preferredTokenAddress,
     this.onPoolCreated,
   });
 
   final List<Token> portfolioTokens;
+  final String? preferredTokenAddress;
   final VoidCallback? onPoolCreated;
 
   @override
@@ -49,10 +51,23 @@ class _CreatePoolSheetState extends ConsumerState<CreatePoolSheet> {
     super.initState();
     _tokenOptions = _dedupeTokens(widget.portfolioTokens);
     if (_tokenOptions.isNotEmpty) {
-      _tokenA = _tokenOptions.first;
-      _tokenB = _tokenOptions.length > 1
-          ? _tokenOptions[1]
-          : _tokenOptions.first;
+      final preferredAddress = widget.preferredTokenAddress
+          ?.trim()
+          .toLowerCase();
+      Token? preferredToken;
+      if (preferredAddress != null) {
+        for (final token in _tokenOptions) {
+          if (token.address.trim().toLowerCase() == preferredAddress) {
+            preferredToken = token;
+            break;
+          }
+        }
+      }
+      _tokenA = preferredToken ?? _tokenOptions.first;
+      _tokenB = _tokenOptions.firstWhere(
+        (token) => !_isSameToken(token, _tokenA),
+        orElse: () => _tokenOptions.first,
+      );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshPoolState();

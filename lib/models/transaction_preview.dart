@@ -13,6 +13,7 @@ class TransactionPreview {
     required this.amountDisplay,
     required this.networkName,
     required this.chainId,
+    this.recipientLabel = 'Recipient',
     this.contractAddress,
     this.gasLimit,
     this.gasPriceWei,
@@ -27,6 +28,7 @@ class TransactionPreview {
   final String amountDisplay;
   final String networkName;
   final int chainId;
+  final String recipientLabel;
   final String? contractAddress;
   final int? gasLimit;
   final BigInt? gasPriceWei;
