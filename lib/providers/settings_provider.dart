@@ -5,6 +5,7 @@ import '../constants/storage_keys.dart';
 import 'package:flutter/material.dart';
 import '../core/config/dex_config.dart';
 import '../models/fiat_currency.dart';
+import '../services/web3_service.dart';
 
 class SettingsState {
   final String rpcUrl;
@@ -58,7 +59,8 @@ class SettingsState {
 }
 
 class SettingsNotifier extends Notifier<SettingsState> {
-  static const String _defaultRpcUrl = 'http://localhost:8545';
+  static const String _defaultRpcUrl = Web3Service.defaultRpcUrl;
+  static const bool _forceRpcFromEnv = Web3Service.forceRpcFromEnv;
 
   @override
   SettingsState build() {
@@ -78,13 +80,20 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final rpc = prefs.getString(StorageKeys.rpcUrl) ?? _defaultRpcUrl;
+    final storedRpc = prefs.getString(StorageKeys.rpcUrl);
+    final rpc = _forceRpcFromEnv
+        ? _defaultRpcUrl
+        : (storedRpc ?? _defaultRpcUrl);
     final biometrics = prefs.getBool(StorageKeys.useBiometrics) ?? false;
     final goHome = prefs.getBool(StorageKeys.goHomeOnSwitch) ?? true;
     final developerMode = prefs.getBool(StorageKeys.developerMode) ?? false;
     final themeModeRaw = prefs.getString(StorageKeys.themeMode);
     final fiatCurrencyRaw = prefs.getString(StorageKeys.fiatCurrency);
     final slippageRaw = prefs.getDouble(StorageKeys.defaultSlippagePercent);
+
+    if (_forceRpcFromEnv && storedRpc != _defaultRpcUrl) {
+      await prefs.setString(StorageKeys.rpcUrl, _defaultRpcUrl);
+    }
 
     state = state.copyWith(
       rpcUrl: rpc,

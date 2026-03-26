@@ -490,14 +490,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       final accountName = await walletService.getAccountName(account.address);
       final normalizedAddress = account.address.toLowerCase();
       final storedBalance = state.accountBalances[normalizedAddress];
-      final fallbackSelectedBalance = normalizedAddress == selectedAddress
-          ? state.balance
-          : '';
+      final isSelected = normalizedAddress == selectedAddress;
       entries.add(
         _StoredAccountEntry(
           account: account,
           name: (accountName ?? '<No Name>').trim(),
-          balance: storedBalance ?? fallbackSelectedBalance,
+          balance: isSelected ? state.balance : (storedBalance ?? ''),
         ),
       );
     }

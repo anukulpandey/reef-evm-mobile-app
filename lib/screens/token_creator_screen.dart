@@ -10,6 +10,7 @@ import '../models/created_token_entry.dart';
 import '../models/token_creation_result.dart';
 import '../models/token_creator_request.dart';
 import '../models/transaction_preview.dart';
+import '../providers/navigation_provider.dart';
 import '../providers/pool_provider.dart';
 import '../providers/service_providers.dart';
 import '../providers/wallet_provider.dart';
@@ -47,6 +48,13 @@ class _TokenCreatorScreenState extends ConsumerState<TokenCreatorScreen> {
     _symbolController.addListener(_handleFieldChanged);
     _supplyController.addListener(_handleFieldChanged);
     _iconUrlController.addListener(_handleFieldChanged);
+    ref.listenManual<int>(navigationTabProvider, (previous, next) {
+      const creatorTabIndex = 3;
+      final movedAwayFromCreator =
+          previous == creatorTabIndex && next != creatorTabIndex;
+      if (!movedAwayFromCreator || _resultState == null || !mounted) return;
+      _resetCreator();
+    });
   }
 
   @override

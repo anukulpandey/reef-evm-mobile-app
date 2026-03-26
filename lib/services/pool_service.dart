@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:web3dart/web3dart.dart';
 
 import '../models/pool.dart';
 import '../models/pool_transaction.dart';
@@ -32,6 +33,22 @@ class PoolService {
   final String _explorerApiV2;
   final Map<String, String?> _tokenIconCache = <String, String?>{};
   static const double _defaultReefUsd = 0.000073;
+  static const String _localRpcUrl = String.fromEnvironment(
+    'REEF_RPC_URL',
+    defaultValue: 'http://127.0.0.1:8545',
+  );
+  static const String _localPairAddress = String.fromEnvironment(
+    'PAIR_ADDRESS',
+    defaultValue: '',
+  );
+  static const String _localTokenAddress = String.fromEnvironment(
+    'TOKEN_ADDRESS',
+    defaultValue: '',
+  );
+  static const String _localWrappedAddress = String.fromEnvironment(
+    'REEFSWAP_WREEF',
+    defaultValue: '',
+  );
 
   Future<List<Pool>> getPools() async {
     const query = r'''
@@ -53,17 +70,20 @@ class PoolService {
     final response = await _postWithEndpointFallback(query);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Subgraph request failed (${response.statusCode})');
+      return _loadLocalPoolsFallback();
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     final errors = decoded['errors'];
     if (errors is List && errors.isNotEmpty) {
-      throw Exception('Subgraph returned errors');
+      return _loadLocalPoolsFallback();
     }
 
     final data = decoded['data'] as Map<String, dynamic>?;
     final pairs = data?['pairs'] as List<dynamic>? ?? <dynamic>[];
+    if (pairs.isEmpty) {
+      return _loadLocalPoolsFallback();
+    }
     final tokenAddresses = <String>{};
     for (final item in pairs) {
       final pair = item as Map<String, dynamic>;
@@ -81,7 +101,7 @@ class PoolService {
 
     final explorerIcons = await _loadExplorerTokenIcons(tokenAddresses);
 
-    return pairs.map((dynamic item) {
+    final mapped = pairs.map((dynamic item) {
       final pair = item as Map<String, dynamic>;
       final token0 = pair['token0'] as Map<String, dynamic>? ?? const {};
       final token1 = pair['token1'] as Map<String, dynamic>? ?? const {};
@@ -137,6 +157,10 @@ class PoolService {
         ],
       );
     }).toList();
+    if (mapped.isEmpty) {
+      return _loadLocalPoolsFallback();
+    }
+    return mapped;
   }
 
   Future<List<PoolTransactionEvent>> getPairTransactions(
@@ -251,18 +275,19 @@ class PoolService {
 
     final response = await _postWithEndpointFallback(query);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      return const <String, double>{};
+      return _loadLocalTokenUsdFallback();
     }
 
     final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) return const <String, double>{};
+    if (decoded is! Map<String, dynamic>) return _loadLocalTokenUsdFallback();
     final errors = decoded['errors'];
-    if (errors is List && errors.isNotEmpty) return const <String, double>{};
+    if (errors is List && errors.isNotEmpty)
+      return _loadLocalTokenUsdFallback();
 
     final data = decoded['data'];
-    if (data is! Map<String, dynamic>) return const <String, double>{};
+    if (data is! Map<String, dynamic>) return _loadLocalTokenUsdFallback();
     final pairs = data['pairs'];
-    if (pairs is! List || pairs.isEmpty) return const <String, double>{};
+    if (pairs is! List || pairs.isEmpty) return _loadLocalTokenUsdFallback();
 
     final reefUsd = await getReefUsdPrice();
     final priceByToken = <String, _WeightedPrice>{};
@@ -362,7 +387,7 @@ class PoolService {
     for (final entry in priceByToken.entries) {
       out[entry.key] = entry.value.price;
     }
-    return out;
+    return out.isEmpty ? _loadLocalTokenUsdFallback() : out;
   }
 
   Future<Map<String, String?>> _loadExplorerTokenIcons(
@@ -431,20 +456,24 @@ class PoolService {
 
     http.Response? lastResponse;
     for (final endpoint in endpoints) {
-      final response = await _client
-          .post(
-            Uri.parse(endpoint),
-            headers: const {'content-type': 'application/json'},
-            body: jsonEncode(<String, dynamic>{
-              'query': query,
-              if (variables != null) 'variables': variables,
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
-      lastResponse = response;
+      try {
+        final response = await _client
+            .post(
+              Uri.parse(endpoint),
+              headers: const {'content-type': 'application/json'},
+              body: jsonEncode(<String, dynamic>{
+                'query': query,
+                if (variables != null) 'variables': variables,
+              }),
+            )
+            .timeout(const Duration(seconds: 15));
+        lastResponse = response;
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return response;
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          return response;
+        }
+      } catch (_) {
+        continue;
       }
     }
 
@@ -453,6 +482,184 @@ class PoolService {
           '{"errors":[{"message":"No subgraph endpoint available"}]}',
           500,
         );
+  }
+
+  Future<List<Pool>> _loadLocalPoolsFallback() async {
+    if (_localPairAddress.trim().isEmpty) return const <Pool>[];
+
+    final rpcClient = http.Client();
+    final web3 = Web3Client(_localRpcUrl, rpcClient);
+    try {
+      const pairAbi = '''
+        [{"inputs":[],"name":"getReserves","outputs":[{"internalType":"uint112","name":"reserve0","type":"uint112"},{"internalType":"uint112","name":"reserve1","type":"uint112"},{"internalType":"uint32","name":"blockTimestampLast","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token0","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token1","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]
+      ''';
+      const erc20MetaAbi = '''
+        [{"constant":true,"inputs":[],"name":"symbol","outputs":[{"name":"","type":"string"}],"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"name","outputs":[{"name":"","type":"string"}],"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"decimals","outputs":[{"name":"","type":"uint8"}],"stateMutability":"view","type":"function"}]
+      ''';
+
+      final pairContract = DeployedContract(
+        ContractAbi.fromJson(pairAbi, 'ReefswapPair'),
+        EthereumAddress.fromHex(_localPairAddress),
+      );
+      final token0Fn = pairContract.function('token0');
+      final token1Fn = pairContract.function('token1');
+      final reservesFn = pairContract.function('getReserves');
+
+      final token0Address =
+          (await web3.call(
+                contract: pairContract,
+                function: token0Fn,
+                params: const <dynamic>[],
+              )).first
+              as EthereumAddress;
+      final token1Address =
+          (await web3.call(
+                contract: pairContract,
+                function: token1Fn,
+                params: const <dynamic>[],
+              )).first
+              as EthereumAddress;
+      final reserves = await web3.call(
+        contract: pairContract,
+        function: reservesFn,
+        params: const <dynamic>[],
+      );
+      final reserve0Raw = reserves[0] as BigInt;
+      final reserve1Raw = reserves[1] as BigInt;
+
+      final token0Meta = await _loadLocalTokenMetadata(
+        web3: web3,
+        abiJson: erc20MetaAbi,
+        address: token0Address,
+      );
+      final token1Meta = await _loadLocalTokenMetadata(
+        web3: web3,
+        abiJson: erc20MetaAbi,
+        address: token1Address,
+      );
+
+      final reserve0 = _rawToDecimal(reserve0Raw, token0Meta.decimals);
+      final reserve1 = _rawToDecimal(reserve1Raw, token1Meta.decimals);
+      final reefUsd = await getReefUsdPrice();
+      final token0IsReef = _isReefLike(token0Meta.symbol);
+      final token1IsReef = _isReefLike(token1Meta.symbol);
+      var token0PriceUsd = 0.0;
+      var token1PriceUsd = 0.0;
+      if (token0IsReef && reserve0 > 0 && reserve1 > 0) {
+        token0PriceUsd = reefUsd;
+        token1PriceUsd = (reserve0 / reserve1) * reefUsd;
+      } else if (token1IsReef && reserve0 > 0 && reserve1 > 0) {
+        token1PriceUsd = reefUsd;
+        token0PriceUsd = (reserve1 / reserve0) * reefUsd;
+      }
+      final reserveUsd =
+          (reserve0 * token0PriceUsd) + (reserve1 * token1PriceUsd);
+
+      return <Pool>[
+        Pool(
+          id: _localPairAddress.trim().toLowerCase(),
+          pairName: '${token0Meta.symbol} - ${token1Meta.symbol}',
+          token0Symbol: token0Meta.symbol,
+          token1Symbol: token1Meta.symbol,
+          token0Address: token0Address.hexEip55.toLowerCase(),
+          token1Address: token1Address.hexEip55.toLowerCase(),
+          token0Decimals: token0Meta.decimals,
+          token1Decimals: token1Meta.decimals,
+          tvl: _formatCompactUsd(reserveUsd),
+          volume24h: _formatCompactUsd(0),
+          reserve0: reserve0,
+          reserve1: reserve1,
+          reserveUsd: reserveUsd,
+          volumeUsd: 0,
+          token0Price: token0PriceUsd,
+          token1Price: token1PriceUsd,
+          percentChange: 0,
+          tokenIcons: <String>[
+            TokenIconResolver.resolveTokenIconUrl(
+              address: token0Address.hexEip55,
+              symbol: token0Meta.symbol,
+            ),
+            TokenIconResolver.resolveTokenIconUrl(
+              address: token1Address.hexEip55,
+              symbol: token1Meta.symbol,
+            ),
+          ],
+        ),
+      ];
+    } catch (_) {
+      return const <Pool>[];
+    } finally {
+      web3.dispose();
+      rpcClient.close();
+    }
+  }
+
+  Future<Map<String, double>> _loadLocalTokenUsdFallback() async {
+    final pools = await _loadLocalPoolsFallback();
+    if (pools.isEmpty) return const <String, double>{};
+    final first = pools.first;
+    final prices = <String, double>{};
+    if (first.token0Address.trim().isNotEmpty && first.token0Price > 0) {
+      prices[first.token0Address.trim().toLowerCase()] = first.token0Price;
+    }
+    if (first.token1Address.trim().isNotEmpty && first.token1Price > 0) {
+      prices[first.token1Address.trim().toLowerCase()] = first.token1Price;
+    }
+    if (_localWrappedAddress.trim().isNotEmpty &&
+        !prices.containsKey(_localWrappedAddress.trim().toLowerCase())) {
+      prices[_localWrappedAddress.trim().toLowerCase()] =
+          await getReefUsdPrice();
+    }
+    return prices;
+  }
+
+  Future<_LocalTokenMetadata> _loadLocalTokenMetadata({
+    required Web3Client web3,
+    required String abiJson,
+    required EthereumAddress address,
+  }) async {
+    final normalized = address.hexEip55.toLowerCase();
+    final fallbackSymbol =
+        normalized == _localWrappedAddress.trim().toLowerCase()
+        ? 'WREEF'
+        : normalized == _localTokenAddress.trim().toLowerCase()
+        ? 'GST'
+        : 'TOKEN';
+    final contract = DeployedContract(
+      ContractAbi.fromJson(abiJson, 'ERC20Meta'),
+      address,
+    );
+
+    Future<T?> tryCall<T>(ContractFunction function) async {
+      try {
+        final result = await web3.call(
+          contract: contract,
+          function: function,
+          params: const <dynamic>[],
+        );
+        if (result.isEmpty) return null;
+        return result.first as T;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final symbol = (await tryCall<String>(
+      contract.function('symbol'),
+    ))?.trim().toUpperCase();
+    final name = (await tryCall<String>(contract.function('name')))?.trim();
+    final decimalsValue = await tryCall<BigInt>(contract.function('decimals'));
+
+    return _LocalTokenMetadata(
+      symbol: symbol?.isNotEmpty == true ? symbol! : fallbackSymbol,
+      name: name?.isNotEmpty == true ? name! : fallbackSymbol,
+      decimals: decimalsValue?.toInt() ?? 18,
+    );
+  }
+
+  static double _rawToDecimal(BigInt value, int decimals) {
+    if (value == BigInt.zero) return 0;
+    return value.toDouble() / BigInt.from(10).pow(decimals).toDouble();
   }
 
   static double _parseDouble(dynamic value) {
@@ -547,4 +754,16 @@ class _WeightedPrice {
 
   final double price;
   final double weight;
+}
+
+class _LocalTokenMetadata {
+  const _LocalTokenMetadata({
+    required this.symbol,
+    required this.name,
+    required this.decimals,
+  });
+
+  final String symbol;
+  final String name;
+  final int decimals;
 }

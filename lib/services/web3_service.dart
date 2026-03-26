@@ -33,14 +33,22 @@ class Eip1559FeeSettings {
 class Web3Service {
   static final BigInt _minimumGasPriceWei = BigInt.from(1000);
   static final BigInt _minimumPriorityFeeWei = BigInt.from(200);
+  static const String defaultRpcUrl = String.fromEnvironment(
+    'REEF_RPC_URL',
+    defaultValue: 'http://localhost:8545',
+  );
+  static const bool forceRpcFromEnv = bool.fromEnvironment(
+    'FORCE_RPC_FROM_ENV',
+    defaultValue: false,
+  );
 
   late Web3Client _client;
   final Client _httpClient = Client();
   late String _rpcUrl;
 
-  Web3Service({String rpcUrl = "http://localhost:8545"}) {
-    _rpcUrl = rpcUrl;
-    _client = Web3Client(rpcUrl, _httpClient);
+  Web3Service({String? rpcUrl}) {
+    _rpcUrl = rpcUrl ?? defaultRpcUrl;
+    _client = Web3Client(_rpcUrl, _httpClient);
   }
 
   void updateRpc(String rpcUrl) {

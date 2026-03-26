@@ -86,6 +86,73 @@ If you are using the local stack already wired into the app, this is enough:
 flutter run
 ```
 
+### Fresh local stack orchestration
+
+This repo now owns the local development startup flow end to end.
+
+From [/Users/anukul/Desktop/reef-evm-mobile-app/tool/fresh_local_stack.sh](/Users/anukul/Desktop/reef-evm-mobile-app/tool/fresh_local_stack.sh):
+
+```bash
+./tool/fresh_local_stack.sh
+```
+
+Supported targets:
+
+```bash
+./tool/fresh_local_stack.sh iphone
+./tool/fresh_local_stack.sh macos
+./tool/fresh_local_stack.sh chrome
+```
+
+What the script does:
+
+- stops the previous tmux chain, graph-node stack, Blockscout stack, and generated Flutter run
+- starts the detached Reef local chain from `../chain-upgrade`
+- funds a fresh deployer EVM account with the local validator helper
+- redeploys Reefswap contracts and seeded activity from `../reef-hardhat-example`
+- rewrites `../v2-subgraph/config/localhost/*` with the fresh factory, wrapped token, and start block
+- starts repo-local Docker graph-node, Postgres, and IPFS from `tool/graph-node/docker-compose.yml`
+- deploys `uniswap-v2-localhost` straight to the local graph-node admin + IPFS endpoints
+- prunes and restarts the Reef-local Blockscout stack from `../blockscout/docker-compose/reef-local.yml`
+- writes the app runtime config to `tool/.local_stack_state.json`
+- launches Flutter with `--dart-define-from-file=tool/.local_stack_state.json`
+
+Shutdown is the inverse:
+
+```bash
+./tool/stop_local_stack.sh
+```
+
+See also [CODEX_RUNBOOK.md](/Users/anukul/Desktop/reef-evm-mobile-app/CODEX_RUNBOOK.md) for the short operator version of the same workflow.
+
+### Generated local runtime state
+
+The fresh-start scripts generate two local-only files:
+
+- `tool/.local_stack_state.json`
+- `tool/.local_stack_deployment.json`
+
+Both are intentionally ignored in git and regenerated on each run.
+
+`tool/.local_stack_state.json` is the single source of truth for the running app config and includes:
+
+- `REEF_CHAIN_ID`
+- `REEF_RPC_URL`
+- `REEFSWAP_WREEF`
+- `REEFSWAP_FACTORY`
+- `REEFSWAP_ROUTER`
+- `EXPLORER_BASE_URL`
+- `EXPLORER_API_V2`
+- `SUBGRAPH_GRAPHQL_ENDPOINT`
+- `FORCE_RPC_FROM_ENV`
+- `START_BLOCK`
+- `PAIR_ADDRESS`
+- `TOKEN_ADDRESS`
+- `DEPLOYER_ADDRESS`
+- `HOST_IP`
+
+For `iphone`, app-facing URLs are rewritten to the Mac LAN IP so a physical device can reach them. For `macos` and `chrome`, the file stays on `127.0.0.1`.
+
 ### Run with explicit endpoints and contracts
 
 Use `--dart-define` instead of hardcoding environment-specific values:
@@ -93,12 +160,14 @@ Use `--dart-define` instead of hardcoding environment-specific values:
 ```bash
 flutter run \
   --dart-define=REEF_CHAIN_ID=13939 \
+  --dart-define=REEF_RPC_URL=http://127.0.0.1:8545 \
   --dart-define=REEFSWAP_WREEF=0xYourWreefAddress \
   --dart-define=REEFSWAP_FACTORY=0xYourFactoryAddress \
   --dart-define=REEFSWAP_ROUTER=0xYourRouterAddress \
   --dart-define=EXPLORER_BASE_URL=https://explorer.example.com \
   --dart-define=EXPLORER_API_V2=https://explorer.example.com/api/v2 \
-  --dart-define=SUBGRAPH_GRAPHQL_ENDPOINT=https://subgraph.example.com/subgraphs/name/uniswap-v2
+  --dart-define=SUBGRAPH_GRAPHQL_ENDPOINT=https://subgraph.example.com/subgraphs/name/uniswap-v2 \
+  --dart-define=FORCE_RPC_FROM_ENV=true
 ```
 
 ### Build release with production config
@@ -107,24 +176,28 @@ flutter run \
 flutter build ios \
   --release \
   --dart-define=REEF_CHAIN_ID=13939 \
+  --dart-define=REEF_RPC_URL=https://rpc.example.com \
   --dart-define=REEFSWAP_WREEF=0xYourWreefAddress \
   --dart-define=REEFSWAP_FACTORY=0xYourFactoryAddress \
   --dart-define=REEFSWAP_ROUTER=0xYourRouterAddress \
   --dart-define=EXPLORER_BASE_URL=https://explorer.example.com \
   --dart-define=EXPLORER_API_V2=https://explorer.example.com/api/v2 \
-  --dart-define=SUBGRAPH_GRAPHQL_ENDPOINT=https://subgraph.example.com/subgraphs/name/uniswap-v2
+  --dart-define=SUBGRAPH_GRAPHQL_ENDPOINT=https://subgraph.example.com/subgraphs/name/uniswap-v2 \
+  --dart-define=FORCE_RPC_FROM_ENV=true
 ```
 
 ```bash
 flutter build apk \
   --release \
   --dart-define=REEF_CHAIN_ID=13939 \
+  --dart-define=REEF_RPC_URL=https://rpc.example.com \
   --dart-define=REEFSWAP_WREEF=0xYourWreefAddress \
   --dart-define=REEFSWAP_FACTORY=0xYourFactoryAddress \
   --dart-define=REEFSWAP_ROUTER=0xYourRouterAddress \
   --dart-define=EXPLORER_BASE_URL=https://explorer.example.com \
   --dart-define=EXPLORER_API_V2=https://explorer.example.com/api/v2 \
-  --dart-define=SUBGRAPH_GRAPHQL_ENDPOINT=https://subgraph.example.com/subgraphs/name/uniswap-v2
+  --dart-define=SUBGRAPH_GRAPHQL_ENDPOINT=https://subgraph.example.com/subgraphs/name/uniswap-v2 \
+  --dart-define=FORCE_RPC_FROM_ENV=true
 ```
 
 ## Config Surfaces You Will Actually Change
@@ -162,11 +235,14 @@ Current behavior:
 - app default is `http://localhost:8545`
 - users can edit the RPC in-app from Developer Settings
 - `SettingsProvider` pushes the edited RPC into `Web3Service`
+- `FORCE_RPC_FROM_ENV=true` now overwrites stale saved `rpc_url` preferences on startup
+- the one-command local stack always launches Flutter with `--dart-define-from-file=tool/.local_stack_state.json`
 
 For production:
 
 - change the default RPC in both places if you do not want `localhost`
 - or pre-seed the setting at first boot if you later add remote config / onboarding config
+- prefer `REEF_RPC_URL` + `FORCE_RPC_FROM_ENV=true` in CI/CD so release builds cannot silently fall back to an old device-local setting
 
 ### 3. Explorer base URL and API v2 URL
 
@@ -308,6 +384,7 @@ Supported compile-time defines currently used by the app:
 
 | Define | Purpose | Default |
 | --- | --- | --- |
+| `REEF_RPC_URL` | default RPC endpoint used by `Web3Service` | `http://localhost:8545` |
 | `REEFSWAP_WREEF` | Wrapped REEF token address | local hardcoded address |
 | `REEFSWAP_FACTORY` | Reefswap factory address | local hardcoded address |
 | `REEFSWAP_ROUTER` | Reefswap router address | local hardcoded address |
@@ -315,6 +392,9 @@ Supported compile-time defines currently used by the app:
 | `EXPLORER_BASE_URL` | explorer base URL | `http://127.0.0.1` |
 | `EXPLORER_API_V2` | explorer API v2 base URL | `http://127.0.0.1/api/v2` |
 | `SUBGRAPH_GRAPHQL_ENDPOINT` | subgraph GraphQL endpoint | `http://127.0.0.1:8000/subgraphs/name/uniswap-v2-localhost` |
+| `FORCE_RPC_FROM_ENV` | forces startup RPC to the compile-time `REEF_RPC_URL` instead of a saved device preference | `false` |
+| `PAIR_ADDRESS` | optional local pair fallback used when subgraph is unavailable | empty |
+| `TOKEN_ADDRESS` | optional local token fallback used with local pair metadata | empty |
 
 ## Production Readiness Checklist
 
@@ -351,6 +431,43 @@ This app is commonly used alongside:
 - Blockscout explorer
 - Graph node + subgraph
 - Reefswap contracts deployed through the external `reef-hardhat-example` repo
+
+The local stack is expected to coordinate with these sibling repos:
+
+- `../chain-upgrade`
+- `../reef-hardhat-example`
+- `../v2-subgraph`
+- `../blockscout`
+
+The repo-local graph-node stack itself lives here:
+
+- [tool/graph-node/docker-compose.yml](/Users/anukul/Desktop/reef-evm-mobile-app/tool/graph-node/docker-compose.yml)
+
+That compose file starts:
+
+- `postgres:15-alpine`
+- `ipfs/kubo:v0.30.0`
+- `graphprotocol/graph-node:v0.40.0`
+
+with graph-node configured against `http://host.docker.internal:8545` for the local chain and exposed on:
+
+- `8000` GraphQL
+- `8020` admin
+- `8030`
+- `8040`
+- `5001` IPFS API
+
+For Blockscout local runs, `localhost:80` must be free. If Valet or another local nginx is holding port `80`, Blockscout will not be reachable on the default local explorer URL until that service is stopped.
+
+### App resilience for partial local stacks
+
+The app is now more tolerant of partially booted local infrastructure:
+
+- wallet RPC can be forced from compile-time config even if a device has a stale saved RPC preference
+- pools can fall back to the fresh local on-chain pair if the subgraph is unavailable
+- token USD pricing can fall back to the local pair when graph-node is down
+- the selected wallet card now prefers the live active-account balance instead of a stale cached balance entry
+- leaving the Create Token result screen and returning to that tab resets the tab back to the creator entry state
 
 If pools or activity do not show up, the problem is usually one of these:
 

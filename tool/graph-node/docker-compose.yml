@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: graph
+      POSTGRES_PASSWORD: graph
+      POSTGRES_DB: graph-node
+    ports:
+      - "5434:5432"
+    volumes:
+      - graph-node-postgres:/var/lib/postgresql/data
+
+  ipfs:
+    image: ipfs/kubo:v0.30.0
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - graph-node-ipfs:/data/ipfs
+
+  graph-node:
+    image: graphprotocol/graph-node:v0.40.0
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - ipfs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+      - "8020:8020"
+      - "8030:8030"
+      - "8040:8040"
+    environment:
+      postgres_host: postgres
+      postgres_user: graph
+      postgres_pass: graph
+      postgres_db: graph-node
+      ipfs: ipfs:5001
+      ethereum: localhost:http://host.docker.internal:8545
+      GRAPH_LOG: info
+      RUST_LOG: info
+      ETHEREUM_REORG_THRESHOLD: 1
+      GRAPH_ALLOW_NON_DETERMINISTIC_IPFS: "true"
+      EXPERIMENTAL_SUBGRAPH_VERSION_SWITCHING_MODE: synced
+
+volumes:
+  graph-node-postgres:
+  graph-node-ipfs:

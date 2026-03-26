@@ -25,7 +25,7 @@ final walletServiceProvider = Provider<WalletService>((ref) {
 });
 
 final web3ServiceProvider = Provider<Web3Service>((ref) {
-  return Web3Service();
+  return Web3Service(rpcUrl: Web3Service.defaultRpcUrl);
 });
 
 final poolServiceProvider = Provider<PoolService>((ref) {
